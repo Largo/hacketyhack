@@ -102,10 +102,27 @@ module Clogs
       ms = ENV["CLOGS_EXIT_AFTER_MS"]&.to_i
       return if ms.nil? || ms <= 0
 
-      add_timer(ms, repeat: false) do
-        capture_screenshot(ENV["CLOGS_SCREENSHOT"]) if ENV["CLOGS_SCREENSHOT"]
-        quit
-      end
+      @exit_deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + ms / 1000.0
+      add_timer(ms, repeat: false) { finish_test_run }
+    end
+
+    # A busy app -- an animation that cannot keep up on a slow machine, say --
+    # can starve a one-shot timer indefinitely. The deadline is therefore also
+    # checked from the paint callback, so the run ends as long as anything is
+    # still happening at all.
+    def check_test_deadline
+      return unless @exit_deadline
+      return if Process.clock_gettime(Process::CLOCK_MONOTONIC) < @exit_deadline
+
+      finish_test_run
+    end
+
+    def finish_test_run
+      return if @exit_deadline.nil?
+
+      @exit_deadline = nil
+      capture_screenshot(ENV["CLOGS_SCREENSHOT"]) if ENV["CLOGS_SCREENSHOT"]
+      quit
     end
 
     def capture_screenshot(path)
@@ -148,6 +165,7 @@ module Clogs
     BACKGROUND = [255, 255, 255, 255].freeze
 
     def on_draw(painter, _params)
+      check_test_deadline
       painter.fill_rect(0, 0, painter.width, painter.height, BACKGROUND)
       return unless @document_root
 
