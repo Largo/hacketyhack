@@ -84,6 +84,10 @@ module Clogs
       # down explicitly. Destroying the window destroys its children.
       UI::L.control_destroy(@window) if @window
       @window = nil
+      # Anything that runs after the window is gone -- at_exit handlers, an
+      # app's own shutdown code -- must not touch the area again. Queueing a
+      # redraw on a destroyed area segfaults.
+      @canvas = nil
       UI::L.uninit if @initialized
     end
 
@@ -132,6 +136,8 @@ module Clogs
     end
 
     def redraw!
+      return if @destroyed
+
       @canvas&.redraw
     end
 

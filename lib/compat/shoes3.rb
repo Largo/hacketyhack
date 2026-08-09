@@ -20,6 +20,11 @@ $LOAD_PATH.unshift(File.expand_path("../shims", __dir__))
 class Shoes
   FONTS = [] unless defined?(FONTS)
 
+  # Shoes 3 exposed the colour table as `Shoes::COLORS`; Lacci keeps it private
+  # inside Shoes::Colors. Hackety Hack's splash screen picks random colours
+  # from it.
+  COLORS = Shoes::Colors.const_get(:COLORS) unless defined?(COLORS)
+
   class << self
     # Shoes 3 took its options as a trailing hash: `Shoes.app :width => 300`.
     alias_method :__shoes3_app, :app
@@ -38,7 +43,54 @@ class Shoes
 
   # Helpers that do not belong to any one drawable.
   module Compat
+    # Mixed into any object that writes a slot block, so the Shoes DSL keeps
+    # working inside the block even though `self` is no longer the app.
+    module ShoesDSLDelegation
+      def method_missing(name, *args, **kwargs, &block)
+        target = Shoes::Compat.dsl_target
+        return super unless target
+
+        target.send(name, *args, **kwargs, &block)
+      end
+
+      def respond_to_missing?(name, include_private = false)
+        target = Shoes::Compat.dsl_target
+        return super unless target
+
+        target.respond_to?(name, include_private) ||
+          !Shoes::Drawable.drawable_class_by_name(name).nil? ||
+          super
+      end
+    end
+
     class << self
+      # The app that slot-block DSL calls are currently forwarded to. Nested
+      # slots stack, so this is a stack rather than a single value.
+      def dsl_target
+        Array(@dsl_targets).last
+      end
+
+      def with_dsl_target(app)
+        (@dsl_targets ||= []).push(app)
+        yield
+      ensure
+        @dsl_targets.pop
+      end
+
+      # True when a slot block should be instance_eval'd into the app, which is
+      # what ordinary Shoes programs expect: blocks written at the top level, or
+      # written somewhere that is already the app.
+      def app_scoped_block?(owner, app)
+        return true if owner.nil?
+        return true if owner.equal?(app) || owner.is_a?(Shoes::App)
+
+        owner.equal?(main_object)
+      end
+
+      def main_object
+        @main_object ||= TOPLEVEL_BINDING.receiver
+      end
+
       def finish_blocks
         @finish_blocks ||= []
       end
@@ -68,6 +120,9 @@ class Shoes
 end
 
 class Shoes::App
+  # Shoes 3 let an app set its own window background colour.
+  attr_accessor :background_color unless method_defined?(:background_color)
+
   # Shoes 3 addressed the current slot as `app.slot`.
   def slot
     current_slot
@@ -78,25 +133,46 @@ class Shoes::App
     destroy
   end unless method_defined?(:close)
 
-  # Shoes 3 ran slot blocks with `self` set to the slot, but fell back to the
-  # object the block was written in for anything the slot did not understand.
-  # Lacci instance_evals slot blocks into the app and raises NameError instead,
-  # which breaks Hackety Hack's tab classes -- they define `content` on
-  # themselves and call it from inside a slot block.
+  # Shoes Classic ran a slot block with `self` still set to the object that
+  # wrote the block; Lacci instance_evals it into the app instead. Lacci calls
+  # this out as a known incompatibility in Slot#append, and it is the single
+  # biggest thing standing between Hackety Hack and running: its tab classes do
   #
-  # Remember the receiver each block was written against, and consult it before
-  # giving up.
+  #   slot.append { @content = flow { content } }
+  #
+  # and read `@content` back later. Under instance_eval that ivar lands on the
+  # app and the tab sees nil.
+  #
+  # So: when a slot block was written inside some other object, keep that object
+  # as `self` and forward the Shoes DSL calls it does not understand to the app.
+  # When the block was written at the top level or already belongs to the app --
+  # which covers ordinary Shoes programs -- nothing changes.
   alias_method :__shoes3_with_slot, :with_slot
-  def with_slot(slot, &block)
-    outer = begin
-      block&.binding&.receiver
+  def with_slot(slot_item, &block)
+    return unless block
+
+    owner = begin
+      block.binding.receiver
     rescue StandardError
       nil
     end
-    (@__shoes3_outer_selves ||= []).push(outer)
-    __shoes3_with_slot(slot, &block)
-  ensure
-    @__shoes3_outer_selves&.pop
+
+    if Shoes::Compat.app_scoped_block?(owner, self)
+      (@__shoes3_outer_selves ||= []).push(owner)
+      begin
+        __shoes3_with_slot(slot_item, &block)
+      ensure
+        @__shoes3_outer_selves.pop
+      end
+    else
+      owner.extend(Shoes::Compat::ShoesDSLDelegation) unless owner.is_a?(Shoes::Compat::ShoesDSLDelegation)
+      push_slot(slot_item)
+      begin
+        Shoes::Compat.with_dsl_target(self) { block.call }
+      ensure
+        pop_slot
+      end
+    end
   end
 
   alias_method :__shoes3_method_missing, :method_missing
@@ -126,7 +202,11 @@ class Shoes::Drawable
   # hash across before it reaches the argument checker.
   module HashStyleArgs
     def initialize(*args, **kwargs, &block)
-      kwargs = args.pop.transform_keys(&:to_sym).merge(kwargs) if args.last.is_a?(Hash)
+      # Widget subclasses declare `init_args :any` and read their own options
+      # hash positionally, so leave their arguments alone.
+      unless is_a?(Shoes::Widget)
+        kwargs = args.pop.transform_keys(&:to_sym).merge(kwargs) if args.last.is_a?(Hash)
+      end
       super(*args, **kwargs, &block)
     end
   end
@@ -203,6 +283,67 @@ class Shoes::Image
     end
   end
   prepend Shoes3Canvas
+end
+
+# Lacci passes a Widget's block to the widget's own initialize *and* then runs
+# it again as the widget's slot body. Its source marks that second call with
+# "# Do Widgets do this?" -- Shoes 3 did not. Hackety Hack's widgets take a
+# block as their click handler, so running it at creation time fires the
+# handler before the widget exists.
+#
+# Redefine the hook Lacci uses to wrap widget initializers, without that call.
+# Hackety Hack's widget classes are defined after this file loads, so they pick
+# this version up.
+class Shoes::Widget
+  def self.method_added(name)
+    return if self == ::Shoes::Widget || name != :initialize
+    return if @midway_through_adding_initialize
+
+    alias_method :__widget_initialize, :initialize
+
+    @midway_through_adding_initialize = true
+    define_method(:initialize) do |*args, **kwargs, &block|
+      super(*args, **kwargs, &block)
+      @options = kwargs
+      create_display_drawable
+      __widget_initialize(*args, **kwargs, &block)
+    end
+    @midway_through_adding_initialize = false
+  end
+end
+
+# Shoes 3's `mask { ... }` slot has no equivalent in Lacci 0.5.0. Define it so
+# programs using it load and lay out; Clogs draws the contents without actually
+# masking, which is noted in the coverage matrix.
+unless defined?(Shoes::Mask)
+  class Shoes::Mask < Shoes::Slot
+    include Shoes::Background
+
+    shoes_events # No Mask-specific events
+
+    def initialize(*args, **kwargs, &block)
+      super
+
+      create_display_drawable
+      @app.with_slot(self, &block) if block
+    end
+  end
+end
+
+# Shoes 3's `shape(left, top) { ... }` took its origin positionally; Lacci only
+# accepts it as styles.
+class Shoes::Shape
+  module Shoes3Origin
+    def initialize(*args, **kwargs, &block)
+      if args.length == 2 && args.all? { |a| a.is_a?(Numeric) }
+        left, top = args
+        args = []
+        kwargs = { left: left, top: top }.merge(kwargs)
+      end
+      super(*args, **kwargs, &block)
+    end
+  end
+  prepend Shoes3Origin
 end
 
 # Shoes 3 let you reposition any drawable after creating it.
