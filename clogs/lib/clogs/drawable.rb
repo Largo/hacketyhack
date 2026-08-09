@@ -145,13 +145,17 @@ module Clogs
       false
     end
 
+    # In Shoes any drawable can carry a click handler, so every peer is a
+    # candidate; the topmost one under the pointer wins.
     def clickable?
-      false
+      true
     end
 
     def on_click(_x, _y, _button); end
 
-    def on_release(_x, _y, _button); end
+    def on_release(x, y, button)
+      notify("click", button, x.round, y.round) if contains?(x, y)
+    end
 
     def on_mouse_move(_x, _y); end
 

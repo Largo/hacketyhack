@@ -215,21 +215,17 @@ module Clogs
       target = peers_at(event.x, event.y).reverse.find { |p| p.clickable? || p.is_a?(Control) }
       return if target == @hovered
 
-      @hovered&.respond_to?(:on_mouse_leave) && @hovered.on_mouse_leave
-      notify_hover(@hovered, "leave") if @hovered
-      @hovered = target
-      target&.respond_to?(:on_mouse_enter) && target.on_mouse_enter
-      notify_hover(target, "hover") if target
-    end
-
-    def notify_hover(peer, event_name)
-      return unless peer
-
-      subscriptions.each do |sub|
-        next unless sub.api_name == event_name
-
-        sub.notify(event_name)
+      if @hovered
+        @hovered.on_mouse_leave if @hovered.respond_to?(:on_mouse_leave)
+        @hovered.notify("leave")
       end
+      @hovered = target
+      if target
+        target.on_mouse_enter if target.respond_to?(:on_mouse_enter)
+        target.notify("hover")
+      end
+      notify_subscribers("hover") if target
+      notify_subscribers("leave") unless target
     end
 
     def set_focus(peer)

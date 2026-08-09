@@ -40,8 +40,10 @@ module Clogs
       case value
       when nil then default
       when Array
+        # Shoes accepts both 0-255 integers and 0.0-1.0 floats, and mixes them
+        # freely: `black(0.6)` is [0, 0, 0, 0.6].
         r, g, b, a = value
-        [r.to_i, g.to_i, b.to_i, (a || 255).to_i]
+        [channel(r), channel(g), channel(b), a.nil? ? 255 : channel(a)]
       when String
         if value.start_with?("#")
           hex(value)
@@ -57,6 +59,14 @@ module Clogs
           default
         end
       end
+    end
+
+    # One colour channel, from either convention.
+    def channel(value)
+      return 0 if value.nil?
+      return (value.clamp(0.0, 1.0) * 255).round if value.is_a?(Float) && value <= 1.0
+
+      value.to_i.clamp(0, 255)
     end
 
     def hex(str)
