@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test before releasing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Install GTK and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 xvfb xauth
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+      - name: Clogs test suite
+        working-directory: clogs
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+      - name: Shoes samples
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+  build:
+    name: Build artifacts
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Build the clogs gem
+        working-directory: clogs
+        run: gem build clogs.gemspec
+
+      # The Hackety Hack bundle is plain Ruby: the libui shared objects come
+      # from the `libui` gem at install time, one per platform, so there is
+      # nothing here to cross-compile.
+      - name: Package Hackety Hack
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ -n "$version" ] || version="${{ github.event.inputs.tag }}"
+          staging="hacketyhack-${version#v}"
+          mkdir -p "dist/$staging"
+          cp -r app lib samples lessons static fonts root clogs Gemfile Rakefile LICENSE "dist/$staging/"
+          cp README.md "dist/$staging/" 2>/dev/null || cp README.textile "dist/$staging/"
+          (cd dist && zip -qr "$staging.zip" "$staging")
+          (cd dist && tar czf "$staging.tar.gz" "$staging")
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            clogs/*.gem
+            dist/*.zip
+            dist/*.tar.gz
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: artifacts
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          [ "${{ github.event_name }}" = "workflow_dispatch" ] && tag="${{ github.event.inputs.tag }}"
+          gh release create "$tag" \
+            --title "Hackety Hack $tag" \
+            --notes-file .github/RELEASE_NOTES.md \
+            --repo "${{ github.repository }}" \
+            artifacts/clogs/*.gem artifacts/dist/*.zip artifacts/dist/*.tar.gz \
+          || gh release upload "$tag" \
+            artifacts/clogs/*.gem artifacts/dist/*.zip artifacts/dist/*.tar.gz \
+            --repo "${{ github.repository }}" --clobber

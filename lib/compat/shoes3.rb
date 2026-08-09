@@ -14,10 +14,19 @@
 
 require "clogs"
 
+# `require "hpricot"` in a user program should find our Nokogiri-backed shim.
+$LOAD_PATH.unshift(File.expand_path("../shims", __dir__))
+
 class Shoes
   FONTS = [] unless defined?(FONTS)
 
   class << self
+    # Shoes 3 took its options as a trailing hash: `Shoes.app :width => 300`.
+    alias_method :__shoes3_app, :app
+    def app(opts = {}, **kwargs, &block)
+      __shoes3_app(**opts.transform_keys(&:to_sym).merge(kwargs), &block)
+    end
+
     # Shoes 3 opened its bundled manual in a new window. There is no bundled
     # manual here; point at the online one instead of failing.
     unless method_defined?(:show_manual) || respond_to?(:show_manual)
@@ -178,6 +187,75 @@ class Shoes::Drawable
   end unless method_defined?(:show)
 end
 
+# Shoes 3's `image(width, height) { ... }` made an off-screen canvas to draw
+# into. Clogs has no off-screen surfaces (libui cannot blit one back), so treat
+# it as an empty image of that size: the app keeps running and the space is
+# reserved, rather than the whole program failing to start.
+class Shoes::Image
+  module Shoes3Canvas
+    def initialize(*args, **kwargs, &block)
+      if args.length == 2 && args.all? { |a| a.is_a?(Numeric) }
+        width, height = args
+        args = [nil]
+        kwargs = kwargs.merge(width: width, height: height)
+      end
+      super(*args, **kwargs, &block)
+    end
+  end
+  prepend Shoes3Canvas
+end
+
+# Shoes 3 let you reposition any drawable after creating it.
+class Shoes::Drawable
+  def move(new_left, new_top)
+    self.left = new_left
+    self.top = new_top
+    self
+  end unless method_defined?(:move)
+
+  def displace(dx, dy)
+    self.left = left.to_i + dx
+    self.top = top.to_i + dy
+    self
+  end unless method_defined?(:displace)
+end
+
+# Lacci validates arc angles as non-negative, but Shoes 3 programs happily pass
+# negative radians to sweep anticlockwise. Normalise into [0, 2pi).
+class Shoes::Arc
+  module Shoes3Angles
+    TWO_PI = Math::PI * 2
+
+    def initialize(*args, **kwargs, &block)
+      args = args.each_with_index.map do |value, index|
+        index >= 4 && value.is_a?(Numeric) && value.negative? ? value % TWO_PI : value
+      end
+      %i[angle1 angle2].each do |key|
+        kwargs[key] %= TWO_PI if kwargs[key].is_a?(Numeric) && kwargs[key].negative?
+      end
+      super(*args, **kwargs, &block)
+    end
+  end
+  prepend Shoes3Angles
+end
+
+# In Shoes 3, `oval(left, top, width, height)` gave an axis-aligned ellipse.
+# Lacci reads the third positional argument as a radius, so a four-argument
+# call comes out twice as wide as intended.
+class Shoes::Oval
+  module Shoes3PositionalArgs
+    def initialize(*args, **kwargs, &block)
+      if args.length == 4 && !kwargs.key?(:width) && !kwargs.key?(:height)
+        left, top, width, height = args
+        args = [left, top]
+        kwargs = kwargs.merge(width: width, height: height)
+      end
+      super(*args, **kwargs, &block)
+    end
+  end
+  prepend Shoes3PositionalArgs
+end
+
 module Kernel
   # Shoes 3's top-level `window` is how Hackety Hack starts. With no app
   # running it opens the main one; inside a running app Shoes 3 would open a
@@ -201,6 +279,14 @@ module Kernel
       end
     end
   end
+end
+
+# Hackety Hack's turtle graphics are part of the environment user programs run
+# in, so make `Turtle` available to anything using this compatibility layer.
+begin
+  require "lib/art/turtle"
+rescue LoadError
+  # Running Clogs without the Hackety Hack tree; that is fine.
 end
 
 # Slots that registered a `finish` block expect it to run on shutdown.

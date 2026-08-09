@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, clogs]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  clogs:
+    name: clogs (${{ matrix.os }}, ruby ${{ matrix.ruby }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ruby: ["3.2", "3.3"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: false
+
+      # libui needs GTK3 at runtime on Linux. The gem ships the libui shared
+      # object itself, so only the system toolkit is needed.
+      - name: Install GTK and a virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        working-directory: clogs
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+
+      # On Linux the windowed tests run against Xvfb. On macOS and Windows the
+      # runners have no interactive session, so the tests that need to open a
+      # window skip themselves and the rest still run.
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        working-directory: clogs
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+      - name: Test (macOS and Windows)
+        if: runner.os != 'Linux'
+        working-directory: clogs
+        run: bundle exec rake test
+
+  hacketyhack:
+    name: Hackety Hack boots
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Install GTK and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+
+      # Proves the Shoes 3 compatibility layer still loads and that the sample
+      # programs Hackety Hack ships really run on Clogs.
+      - name: Run the bundled Shoes samples
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples

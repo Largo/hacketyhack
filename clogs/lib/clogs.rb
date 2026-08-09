@@ -73,6 +73,7 @@ require_relative "clogs/drawables/image"
 require_relative "clogs/drawables/misc"
 require_relative "clogs/app"
 require_relative "clogs/display_service"
+require_relative "clogs/lacci_compat"
 
 Shoes::DisplayService.set_display_service_class(Clogs::DisplayService)
 

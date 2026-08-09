@@ -18,7 +18,7 @@ module Clogs
       attr_accessor :builtin_response
     end
 
-    attr_reader :window, :canvas, :document_root
+    attr_reader :window, :canvas, :document_root, :mouse_state
 
     def initialize(properties)
       super
