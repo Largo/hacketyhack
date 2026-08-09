@@ -10,6 +10,7 @@ gem "clogs", path: "clogs"
 gem "nokogiri"   # replaces Hpricot, which no longer builds
 gem "sqlite3"
 
-group :development do
+group :development, :test do
   gem "rake"
+  gem "minitest", "~> 5.0"
 end
