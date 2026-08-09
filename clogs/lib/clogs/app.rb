@@ -1,0 +1,346 @@
+# frozen_string_literal: true
+
+require_relative "drawable"
+require_relative "canvas"
+require_relative "dialogs"
+require_relative "clipboard"
+
+module Clogs
+  # The display side of Shoes::App: one libui window, one canvas, and the
+  # plumbing that turns libui's callbacks into Shoes events.
+  class App < Drawable
+    class << self
+      attr_accessor :instance
+
+      # Set synchronously while a `builtin` event is being handled, so that
+      # `ask`/`confirm` can return a value even on Lacci versions that have no
+      # response channel of their own.
+      attr_accessor :builtin_response
+    end
+
+    attr_reader :window, :canvas, :document_root
+
+    def initialize(properties)
+      super
+      App.instance = self
+      @timers = []
+      @needs_layout = true
+      @focused = nil
+      @hovered = nil
+      @mouse_state = [0, 0, 0]
+
+      bind_shoes_event(event_name: "init") { init }
+      bind_shoes_event(event_name: "run") { run }
+      bind_shoes_event(event_name: "destroy") { destroy }
+      Shoes::DisplayService.subscribe_to_event("builtin", nil) do |cmd, args|
+        App.builtin_response = builtin(cmd, args)
+      end
+    end
+
+    def app
+      self
+    end
+
+    def title
+      style(:title) || "Shoes"
+    end
+
+    def app_width
+      (style(:width) || 480).to_i
+    end
+
+    def app_height
+      (style(:height) || 420).to_i
+    end
+
+    def init
+      UI::L.init unless @initialized
+      @initialized = true
+
+      @window = UI::L.new_window(title, app_width, app_height, 0)
+      UI::L.window_set_margined(@window, 0)
+      UI::L.window_on_closing(@window) do
+        quit
+        0
+      end
+
+      @canvas = Canvas.new
+      @canvas.on_draw = method(:on_draw)
+      @canvas.on_mouse = method(:on_mouse)
+      @canvas.on_key = method(:on_key)
+      @canvas.on_crossed = method(:on_crossed)
+
+      # An area needs a stretchy box around it or libui gives it no size.
+      box = UI::L.new_vertical_box
+      UI::L.box_append(box, @canvas.area, 1)
+      UI::L.window_set_child(@window, box)
+    end
+
+    def run
+      UI::L.control_show(@window)
+      install_test_hooks
+      UI::L.main
+      # libui aborts on exit if a control is still alive, so tear the window
+      # down explicitly. Destroying the window destroys its children.
+      UI::L.control_destroy(@window) if @window
+      @window = nil
+      UI::L.uninit if @initialized
+    end
+
+    # Hooks for automated testing: run the app for a fixed time, optionally
+    # capture the screen, then quit. Used by Clogs' own visual tests and handy
+    # for any Shoes app under CI.
+    #
+    #   CLOGS_EXIT_AFTER_MS=800 CLOGS_SCREENSHOT=out.png ruby app.rb
+    def install_test_hooks
+      ms = ENV["CLOGS_EXIT_AFTER_MS"]&.to_i
+      return if ms.nil? || ms <= 0
+
+      add_timer(ms, repeat: false) do
+        capture_screenshot(ENV["CLOGS_SCREENSHOT"]) if ENV["CLOGS_SCREENSHOT"]
+        quit
+      end
+    end
+
+    def capture_screenshot(path)
+      # ImageMagick's `import` is the only dependency-free way to do this on
+      # X11; elsewhere the screenshot is simply skipped.
+      system("import", "-window", "root", path, err: File::NULL)
+    end
+
+    def destroy
+      return if @destroyed
+
+      @destroyed = true
+      UI::L.quit
+    end
+
+    def quit
+      notify("destroy")
+      destroy
+    end
+
+    def document_root=(root)
+      @document_root = root
+      root.app = self
+      needs_layout!
+    end
+
+    def needs_layout!
+      @needs_layout = true
+      redraw!
+    end
+
+    def redraw!
+      @canvas&.redraw
+    end
+
+    # ---- painting -----------------------------------------------------
+
+    BACKGROUND = [255, 255, 255, 255].freeze
+
+    def on_draw(painter, _params)
+      painter.fill_rect(0, 0, painter.width, painter.height, BACKGROUND)
+      return unless @document_root
+
+      if @needs_layout || @last_width != painter.width
+        @document_root.measure(painter.width)
+        @last_width = painter.width
+        @needs_layout = false
+      end
+      @document_root.paint(painter, 0, 0)
+      open_list_boxes.each { |lb| lb.draw_overlay(painter) }
+    rescue StandardError => e
+      report_error(e)
+    end
+
+    def open_list_boxes
+      return [] unless @document_root
+
+      found = []
+      @document_root.each_peer { |peer| found << peer if peer.is_a?(ListBox) && peer.open? }
+      found
+    end
+
+    # ---- input --------------------------------------------------------
+
+    def peers_at(x, y)
+      return [] unless @document_root
+
+      hits = []
+      @document_root.each_peer { |peer| hits << peer if peer.contains?(x, y) }
+      hits
+    end
+
+    def topmost_clickable(x, y)
+      peers_at(x, y).reverse.find(&:clickable?)
+    end
+
+    def on_mouse(event)
+      @mouse_state = [event.button_down? ? 1 : 0, event.x.round, event.y.round]
+      Shoes::DisplayService.mouse_state = @mouse_state if Shoes::DisplayService.respond_to?(:mouse_state=)
+
+      update_hover(event)
+      notify_subscribers("motion", event.x.round, event.y.round,
+        event.modifiers.anybits?(UI::MOD_CTRL), event.modifiers.anybits?(UI::MOD_SHIFT))
+
+      if event.down.positive?
+        handle_press(event)
+      elsif event.up.positive?
+        handle_release(event)
+      end
+    rescue StandardError => e
+      report_error(e)
+    end
+
+    def handle_press(event)
+      # A click outside an open drop-down closes it.
+      open_list_boxes.each { |lb| lb.close unless lb.contains?(event.x, event.y) || lb.overlay_contains?(event.x, event.y) }
+
+      target = open_list_boxes.find { |lb| lb.overlay_contains?(event.x, event.y) } ||
+        topmost_clickable(event.x, event.y)
+      set_focus(target&.focusable? ? target : nil)
+      target&.on_click(event.x, event.y, event.down)
+      @pressed = target
+      notify_subscribers("click", event.down, event.x.round, event.y.round)
+    end
+
+    def handle_release(event)
+      @pressed&.on_release(event.x, event.y, event.up)
+      @pressed = nil
+      notify_subscribers("release", event.up, event.x.round, event.y.round)
+    end
+
+    def update_hover(event)
+      target = peers_at(event.x, event.y).reverse.find { |p| p.clickable? || p.is_a?(Control) }
+      return if target == @hovered
+
+      @hovered&.respond_to?(:on_mouse_leave) && @hovered.on_mouse_leave
+      notify_hover(@hovered, "leave") if @hovered
+      @hovered = target
+      target&.respond_to?(:on_mouse_enter) && target.on_mouse_enter
+      notify_hover(target, "hover") if target
+    end
+
+    def notify_hover(peer, event_name)
+      return unless peer
+
+      subscriptions.each do |sub|
+        next unless sub.api_name == event_name
+
+        sub.notify(event_name)
+      end
+    end
+
+    def set_focus(peer)
+      return if peer == @focused
+
+      @focused&.focused = false
+      @focused&.focus_lost
+      @focused = peer
+      return unless peer
+
+      peer.focused = true
+      peer.focus_gained
+    end
+
+    def on_key(event)
+      return false if @destroyed
+
+      if @focused&.on_key(event)
+        redraw!
+        return true
+      end
+      name = key_name(event)
+      return false unless name && !event.up
+
+      notify_subscribers("keypress", name)
+      true
+    rescue StandardError => e
+      report_error(e)
+      false
+    end
+
+    # Shoes reports keys as single characters, names like "up", or
+    # "control_x" style combinations.
+    def key_name(event)
+      base = if event.ext
+        event.ext.to_s
+      elsif event.char
+        case event.char
+        when "\b", "\x7F" then "backspace"
+        when "\r", "\n" then "\n"
+        when "\t" then "tab"
+        when " " then " "
+        else event.char
+        end
+      end
+      return nil unless base
+
+      mods = []
+      mods << "control" if event.ctrl?
+      mods << "alt" if event.alt?
+      mods << "shift" if event.shift? && base.length > 1
+      mods.empty? ? base : (mods + [base]).join("_")
+    end
+
+    def on_crossed(left)
+      return unless left
+
+      @hovered&.on_mouse_leave if @hovered.respond_to?(:on_mouse_leave)
+      @hovered = nil
+      redraw!
+    end
+
+    # ---- subscriptions and timers -------------------------------------
+
+    def subscriptions
+      found = []
+      @document_root&.each_peer { |peer| found << peer if peer.is_a?(SubscriptionItem) }
+      found
+    end
+
+    def notify_subscribers(api_name, *args)
+      subscriptions.each do |sub|
+        sub.notify(api_name, *args) if sub.api_name == api_name
+      end
+    end
+
+    # libui's timer callback returns nonzero to keep firing.
+    def add_timer(interval_ms, repeat: true, &block)
+      callback = UI.callback(1, [0]) do
+        begin
+          block.call
+        rescue StandardError => e
+          report_error(e)
+        end
+        repeat && !@destroyed ? 1 : 0
+      end
+      UI::L.timer(interval_ms, callback, nil)
+      callback
+    end
+
+    # ---- builtins -----------------------------------------------------
+
+    def builtin(cmd, args)
+      case cmd.to_s
+      when "alert" then Dialogs.alert(@window, args[0])
+      when "confirm" then Dialogs.confirm(@window, args[0])
+      when "ask" then Dialogs.ask(@window, args[0])
+      when "ask_open_file" then Dialogs.open_file(@window)
+      when "ask_save_file" then Dialogs.save_file(@window)
+      when "ask_open_folder" then Dialogs.open_folder(@window)
+      when "ask_color" then nil
+      when "font" then nil
+      end
+    rescue StandardError => e
+      report_error(e)
+      nil
+    end
+
+    def report_error(error)
+      warn "Clogs error: #{error.class}: #{error.message}"
+      warn error.backtrace.first(12).join("\n") if error.backtrace
+    end
+  end
+end
