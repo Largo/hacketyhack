@@ -34,40 +34,46 @@ layout, text, painting, widgets and input. See
 
 ## Where the port stands
 
-**Working.** Clogs runs Shoes programs. Six of the twelve Shoes programs that
-Hackety Hack ships in `samples/` run unmodified:
+**The IDE runs.** `ruby hacketyhack.rb` opens Hackety Hack: the splash
+animation, the side tabs, the Home tab and its artwork all render on Clogs.
+`rake boot` proves it headlessly and CI runs that on every push.
 
 ```
 bundle install
-rake samples          # runs each sample headlessly and reports pass/fail
+ruby hacketyhack.rb    # the IDE
+rake samples           # the bundled Shoes programs, headless
+rake boot              # IDE smoke test
 ```
 
-`Clock`, `Scribble`, `Pong`, `Duel`, `Follow` and `Arcs` all work, exercising
-animation, `clear`/redraw, mouse input, art drawables and styled text. The other
-six need Shoes 3 features that are not implemented — off-screen `image`
-canvases, `download`, and Hackety Hack's own turtle widgets. `rake samples`
-lists them explicitly rather than hiding them.
+Six of the twelve Shoes programs in `samples/` run unmodified — `Clock`,
+`Scribble`, `Pong`, `Duel`, `Follow` and `Arcs` — exercising animation,
+`clear`/redraw, mouse input, art drawables and styled text. `rake samples`
+lists the rest rather than hiding them; they need Shoes 3 off-screen `image`
+canvases, `download`, or Hackety Hack's turtle widgets.
 
-Also done as part of this work:
+Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
+`lib/compat/shoes3.rb`:
 
-- Hpricot, which has not built since 2010, is replaced by a Nokogiri-backed
-  shim (`lib/compat/hpricot.rb`).
-- A Shoes 3 compatibility layer (`lib/compat/shoes3.rb`) bridges the gap between
-  Shoes 3 and Lacci: trailing-hash arguments, `window`, `dialog`, chained
-  `hover`/`leave`/`click`, `move`/`displace`, `finish`, class-level `style`,
-  four-argument `oval`, negative arc angles.
-- The dead hackety.org version check no longer crashes startup.
+- **Slot-block scoping.** Lacci `instance_eval`s slot blocks into the app and
+  documents this as a known incompatibility. Hackety Hack's tab classes set
+  `@content` inside `slot.append { ... }` and read it back later, so those
+  ivars were landing on the app. Shoes Classic semantics are restored: the
+  block keeps its own `self`, and Shoes DSL calls forward to the app.
+- **Widget blocks.** Lacci hands a `Shoes::Widget`'s block to the widget's
+  initializer *and* then runs it again as the widget's slot body (its source
+  marks this "# Do Widgets do this?"). Hackety Hack's widgets take that block
+  as a click handler, so it fired at creation time.
+- Trailing-hash arguments, `window`, `dialog`, chained `hover`/`leave`/`click`,
+  `move`/`displace`, `finish`, class-level `style`, `Shoes::COLORS`,
+  `Shoes::Mask`, positional `shape`/`oval` origins, negative arc angles, and
+  `para.cursor`.
 
-**Not working yet: the IDE itself.** `app/ui/mainwindow.rb` now gets a long way
-— the window opens, the side tabs and content slots are built — but it stops at
-a structural difference. Shoes 3 ran a slot block with `self` still set to the
-object that wrote it, so Hackety Hack's tab classes could set `@content` inside
-`slot.append do ... end` and read it back later. Lacci `instance_eval`s slot
-blocks into the app, so those instance variables land on the wrong object.
+Hpricot, which has not built since 2010, is replaced by a Nokogiri shim, and
+the dead hackety.org version check no longer crashes startup.
 
-Fixing this properly means either teaching Lacci about slot-block owners
-(the better fix, and useful to Scarpe as well) or restructuring Hackety Hack's
-tab classes to stop relying on it. Neither is a shim.
+**Still rough.** The editor tab is not usable yet, the online features point at
+a server that no longer exists, and large images are expensive to draw — see
+the note on libui and bitmaps in the coverage matrix.
 
 ## Development
 

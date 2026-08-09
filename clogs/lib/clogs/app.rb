@@ -78,6 +78,8 @@ module Clogs
 
     def run
       UI::L.control_show(@window)
+      @running = true
+      arm_timers
       install_test_hooks
       UI::L.main
       # libui aborts on exit if a control is still alive, so tear the window
@@ -309,17 +311,47 @@ module Clogs
     end
 
     # libui's timer callback returns nonzero to keep firing.
+    #
+    # Timers may only be armed once the main loop is running: Shoes programs
+    # routinely call `animate` or `every` while the app is still being built,
+    # and handing libui a timer before then crashes it. Queue those and arm
+    # them when the loop starts.
     def add_timer(interval_ms, repeat: true, &block)
-      callback = UI.callback(1, [0]) do
-        begin
-          block.call
-        rescue StandardError => e
-          report_error(e)
-        end
-        repeat && !@destroyed ? 1 : 0
+      interval_ms = 1 if interval_ms.to_i < 1
+      unless @running
+        (@pending_timers ||= []) << [interval_ms, repeat, block]
+        return
       end
-      UI::L.timer(interval_ms, callback, nil)
-      callback
+
+      # Arming a timer from inside a libui callback re-enters the loop's own
+      # bookkeeping and crashes; queue_main defers it to a safe point. Shoes
+      # programs create timers from event handlers all the time.
+      UI::L.queue_main { arm_timer(interval_ms, repeat, block) }
+    end
+
+    def arm_timers
+      pending = @pending_timers || []
+      @pending_timers = nil
+      pending.each { |interval, repeat, block| arm_timer(interval, repeat, block) }
+    end
+
+    # The libui binding builds the callback itself when given a block, which
+    # is the only way to get the `int (*)(void *)` signature right; a
+    # hand-rolled closure with the wrong arity corrupts the stack.
+    # Returning nonzero keeps the timer running.
+    def arm_timer(interval_ms, repeat, block)
+      UI::L.timer(interval_ms) do
+        if @destroyed
+          0
+        else
+          begin
+            block.call
+          rescue StandardError => e
+            report_error(e)
+          end
+          repeat ? 1 : 0
+        end
+      end
     end
 
     # ---- builtins -----------------------------------------------------

@@ -7,6 +7,24 @@ task :run do
   ruby "-Iclogs/lib -I. hacketyhack.rb"
 end
 
+desc "Boot the Hackety Hack IDE headlessly and check it builds its window"
+task :boot do
+  require "open3"
+
+  _out, err, status = Open3.capture3(
+    { "CLOGS_EXIT_AFTER_MS" => "2500" },
+    RbConfig.ruby, File.join(__dir__, "hacketyhack.rb")
+  )
+  noise = err.lines.reject do |line|
+    line =~ /dbind-WARNING|AT-SPI|No release found in CHANGELOG|Unexpected non-style keyword|^\s*$/
+  end
+
+  raise "Hackety Hack exited with #{status.exitstatus}:\n#{err}" unless status.success?
+  raise "Hackety Hack wrote to stderr:\n#{noise.join}" unless noise.empty?
+
+  puts "Hackety Hack booted, built its window and shut down cleanly."
+end
+
 desc "Run every bundled Shoes sample headlessly and report which ones work"
 task :samples do
   require "open3"
@@ -52,4 +70,4 @@ KNOWN_SAMPLE_FAILURES = [
   "samples/Turtle Stars.rb"       # turtle canvas needs Hackety Hack's own widgets
 ].freeze
 
-task default: :samples
+task default: [:samples, :boot]

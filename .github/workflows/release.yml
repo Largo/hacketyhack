@@ -34,6 +34,8 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
       - name: Shoes samples
         run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+      - name: Boot the IDE
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
 
   build:
     name: Build artifacts
@@ -58,7 +60,7 @@ jobs:
           [ -n "$version" ] || version="${{ github.event.inputs.tag }}"
           staging="hacketyhack-${version#v}"
           mkdir -p "dist/$staging"
-          cp -r app lib samples lessons static fonts root clogs Gemfile Rakefile LICENSE "dist/$staging/"
+          cp -r app lib samples lessons static fonts root clogs Gemfile Rakefile LICENSE hacketyhack.rb "dist/$staging/"
           cp README.md "dist/$staging/" 2>/dev/null || cp README.textile "dist/$staging/"
           (cd dist && zip -qr "$staging.zip" "$staging")
           (cd dist && tar czf "$staging.tar.gz" "$staging")

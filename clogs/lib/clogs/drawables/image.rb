@@ -29,6 +29,13 @@ module Clogs
         cache[key] ||= build_runs(url, width, height)
       end
 
+      # Every rectangle is a separate libui fill, so a photograph can cost tens
+      # of thousands of draw calls per frame and starve the event loop. Flat
+      # art stays well under this; anything that does not gets sampled at a
+      # coarser resolution until it fits, trading sharpness for a UI that still
+      # responds. None of this is needed once libui exports uiDrawImage.
+      RUN_BUDGET = 40_000
+
       def build_runs(url, width, height)
         pixels, src_w, src_h = load_pixels(url)
         return nil unless pixels
@@ -36,39 +43,50 @@ module Clogs
         width = src_w if width.nil? || width <= 0
         height = src_h if height.nil? || height <= 0
 
+        runs = encode(pixels, src_w, src_h, width, height, 1)
+        step = 1
+        while runs.size > RUN_BUDGET && step < 8
+          step *= 2
+          runs = encode(pixels, src_w, src_h, width, height, step)
+        end
+        [runs, width, height]
+      end
+
+      # Walk the target rectangle at `step` pixels at a time, emitting one
+      # rectangle per run of equal colour.
+      def encode(pixels, src_w, src_h, width, height, step)
         runs = []
-        height.times do |y|
+        0.step(height - 1, step) do |y|
           sy = src_h == height ? y : (y * src_h / height)
           row_start = sy * src_w
           run_color = nil
           run_x = 0
-          width.times do |x|
+          0.step(width - 1, step) do |x|
             sx = src_w == width ? x : (x * src_w / width)
             color = pixels[row_start + sx]
             next if color == run_color
 
-            runs << [run_x, y, x - run_x, run_color] if run_color && run_color[3] > 0
+            runs << [run_x, y, x - run_x, run_color] if run_color && run_color[3].positive?
             run_color = color
             run_x = x
           end
-          runs << [run_x, y, width - run_x, run_color] if run_color && run_color[3] > 0
+          runs << [run_x, y, width - run_x, run_color] if run_color && run_color[3].positive?
         end
-        # Merge vertically adjacent identical runs into rectangles.
-        [compact(runs), width, height]
+        compact(runs, step)
       end
 
       # Rows that repeat identically become one taller rectangle. Flat art
       # collapses dramatically here.
-      def compact(runs)
+      def compact(runs, step = 1)
         by_key = {}
         result = []
         runs.each do |x, y, w, color|
           key = [x, w, color]
           prev = by_key[key]
           if prev && prev[1] + prev[3] == y
-            prev[3] += 1
+            prev[3] += step
           else
-            rect = [x, y, w, 1, color]
+            rect = [x, y, w, step, color]
             result << rect
             by_key[key] = rect
           end

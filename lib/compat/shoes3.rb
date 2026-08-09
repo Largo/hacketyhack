@@ -196,6 +196,30 @@ class Shoes::App
   end
 end
 
+class Shoes::App
+  # Shoes 3 set the mouse pointer shape with `self.cursor = :text`. libui has
+  # no cursor API, so this records the value without changing the pointer --
+  # Hackety Hack's editor reads it back, so it has to round-trip.
+  attr_writer :cursor unless method_defined?(:cursor=)
+
+  def cursor
+    @cursor ||= :arrow
+  end unless method_defined?(:cursor)
+end
+
+class Shoes::Para
+  # Shoes 3's `para.cursor = n` put a text caret at character n. Clogs draws it.
+  shoes_styles :text_cursor unless shoes_style_name?(:text_cursor)
+
+  def cursor=(position)
+    self.text_cursor = position
+  end unless method_defined?(:cursor=)
+
+  def cursor
+    text_cursor
+  end unless method_defined?(:cursor)
+end
+
 class Shoes::Drawable
   # Shoes 3 predates keyword arguments: styles were passed as a trailing hash,
   # `image(path, :bottom => 0)`. Lacci wants real keywords, so move a trailing

@@ -76,3 +76,6 @@ jobs:
       # programs Hackety Hack ships really run on Clogs.
       - name: Run the bundled Shoes samples
         run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot

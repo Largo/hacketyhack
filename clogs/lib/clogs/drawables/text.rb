@@ -141,7 +141,29 @@ module Clogs
     end
 
     def draw(painter, x, y)
-      @paragraph&.draw(painter, x, y)
+      return unless @paragraph
+
+      @paragraph.draw(painter, x, y)
+      draw_text_cursor(painter, x, y)
+    end
+
+    # Shoes' `para.cursor = n` puts a caret at character n. libui's text layouts
+    # do not expose caret geometry, but Clogs lays out word by word, so the
+    # position is a lookup plus one substring measurement.
+    def draw_text_cursor(painter, x, y)
+      position = style(:text_cursor)
+      return if position.nil? || ENV["CLOGS_NO_CARET"]
+
+      item = @paragraph.placed.find do |placed|
+        position >= placed.char_offset && position <= placed.char_offset + placed.text.length
+      end
+      item ||= @paragraph.placed.last
+      return unless item
+
+      prefix = item.text[0...(position - item.char_offset)].to_s
+      cx = x + item.x + Paragraph.measure(prefix, item.style)[0]
+      cy = y + item.y
+      painter.line(cx, cy, cx, cy + item.height, [0, 0, 0, 255], thickness: 1)
     end
 
     def clickable?

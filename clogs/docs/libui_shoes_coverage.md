@@ -29,6 +29,52 @@ point.
 libui's native controls are still used where they fit: menus, message boxes,
 file pickers, and the `ask`/`confirm` dialogs.
 
+### Could we position native controls anyway?
+
+Three ideas, in the order they suggest themselves.
+
+**Margins: no.** libui's only spacing knobs are `uiBoxSetPadded`,
+`uiGridSetPadded` and `uiWindowSetMargined`, and all three take a *boolean*,
+not a pixel count. There is no per-control margin, no minimum-size call, and no
+way to ask a control to be a particular size. Sizes come entirely from content
+and from how the box distributes stretch.
+
+**A grid of spacers: no, not really.** `uiGridAppend` places a control at a
+(column, row) with spans and alignment, so you can approximate a layout. But
+grid tracks are sized by their contents, and since you cannot give a control a
+fixed size, you cannot make a track a particular number of pixels wide. It gets
+you "roughly there", not "at (137, 42)", and it goes wrong differently on each
+platform's font metrics.
+
+**The native handle: yes, and it works.** `uiControlHandle(c)` is exported and
+returns the underlying platform object — `GtkWidget*` on GTK, `NSView*` on
+macOS, `HWND` on Windows. Verified on this machine:
+
+```ruby
+btn    = UI.new_button("hi")
+handle = UI.control_handle(btn)
+Gtk.gtk_widget_get_name(Fiddle::Pointer.new(handle))  #=> "GtkButton"
+
+fixed = Gtk.gtk_fixed_new
+Gtk.gtk_fixed_put(fixed, Fiddle::Pointer.new(handle), 137, 42)   # works
+```
+
+So a real Shoes layout driving *real* native widgets is achievable: put a
+`GtkFixed` (or `GtkLayout`) behind the canvas and `gtk_fixed_put` /
+`gtk_fixed_move` each control as the layout engine computes positions. The
+equivalents are `SetWindowPos` on Win32 and `-[NSView setFrame:]` on macOS.
+
+The catch is that it is three platform-specific code paths hanging off Fiddle
+handles into GTK, user32 and the Objective-C runtime — exactly the portability
+that using libui was meant to buy. It is worth doing for the controls where
+native behaviour genuinely matters (`edit_line` and `edit_box`, which today
+lose input-method support, accessibility and the platform's own text
+shortcuts), and not worth it for buttons and checkboxes, which Clogs already
+draws convincingly.
+
+That is the recommended next step if Clogs needs to feel native, and it is
+tracked rather than done: the current release draws everything itself.
+
 ## What libui gives us
 
 Verified working:
