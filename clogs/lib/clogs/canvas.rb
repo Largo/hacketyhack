@@ -97,8 +97,29 @@ module Clogs
       end
     end
 
+    # libui reports the *unshifted* key for an area, so "shift" plus "1" is
+    # reported as "1" rather than "!". Applying shift here keeps the rest of
+    # Clogs working in characters. The symbol half of the table assumes a US
+    # layout; letters are correct everywhere.
+    SHIFTED = {
+      "1" => "!", "2" => "@", "3" => "#", "4" => "$", "5" => "%", "6" => "^",
+      "7" => "&", "8" => "*", "9" => "(", "0" => ")", "-" => "_", "=" => "+",
+      "[" => "{", "]" => "}", "\\" => "|", ";" => ":", "'" => '"', "," => "<",
+      "." => ">", "/" => "?", "`" => "~"
+    }.freeze
+
     def key_event(e)
-      char = e.Key.zero? ? nil : e.Key.chr
+      raw = e.Key
+      char = case raw
+      when nil, 0 then nil
+      when Integer then raw.chr
+      else raw.to_s.empty? ? nil : raw.to_s
+      end
+
+      if char && e.Modifiers.anybits?(UI::MOD_SHIFT)
+        char = SHIFTED[char] || char.upcase
+      end
+
       KeyEvent.new(
         char: char, ext: UI::EXT_KEYS[e.ExtKey], modifier: e.Modifier,
         modifiers: e.Modifiers, up: e.Up != 0

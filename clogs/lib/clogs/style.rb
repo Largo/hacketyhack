@@ -62,7 +62,9 @@ module Clogs
     def hex(str)
       s = str.delete_prefix("#")
       s = s.chars.map { |c| c * 2 }.join if s.length == 3
-      [s[0, 2].to_i(16), s[2, 2].to_i(16), s[4, 2].to_i(16), s[6, 2] ? s[6, 2].to_i(16) : 255]
+      alpha = s[6, 2]
+      [s[0, 2].to_i(16), s[2, 2].to_i(16), s[4, 2].to_i(16),
+       alpha.nil? || alpha.empty? ? 255 : alpha.to_i(16)]
     end
 
     def named(name)
