@@ -33,7 +33,7 @@ module Clogs
       @children.reject { |c| c.is_a?(Background) || c.is_a?(Border) || c.hidden? }
     end
 
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       ml, _mt, mr, _mb = margin
       pl, pt, pr, pb = padding
 
@@ -41,28 +41,55 @@ module Clogs
       outer_width = 0 if outer_width.negative?
       content_width = [outer_width - pl - pr, 0].max
 
-      flowed, positioned = laid_out_children.partition { |c| !c.positioned? }
-      content_height = flow? ? layout_flow(flowed, content_width) : layout_stack(flowed, content_width)
+      requested = requested_height(available_height)
+      content_avail_height = requested ? [requested - pt - pb, 0].max : available_height
 
-      positioned.each do |child|
-        child.measure(content_width)
-        child.x = pl + Style.dimension(child.style(:left), content_width).to_i
-        child.y = pt + Style.dimension(child.style(:top), outer_width).to_i
+      flowed, positioned = laid_out_children.partition { |c| !c.positioned? }
+      content_height = if flow?
+        layout_flow(flowed, content_width, content_avail_height)
+      else
+        layout_stack(flowed, content_width, content_avail_height)
       end
 
       @content_width = content_width
       @width = outer_width
-      @height = requested_height(available_width) || (content_height + pt + pb)
+      @height = requested || (content_height + pt + pb)
+
+      inner_height = [@height - pt - pb, 0].max
+      positioned.each do |child|
+        child.measure(content_width, inner_height)
+        child.x = pl + position_x(child, content_width)
+        child.y = pt + position_y(child, inner_height)
+      end
+
       decorations.each { |d| d.measure_for_slot(@width, @height) }
     end
 
-    def layout_stack(kids, content_width)
+    # Shoes positions from whichever edges are given; the missing coordinate
+    # defaults to the slot's origin.
+    def position_x(child, extent)
+      left = Style.position(child.style(:left), extent)
+      return left if left
+
+      right = Style.position(child.style(:right), extent)
+      right ? extent - right - child.width : 0
+    end
+
+    def position_y(child, extent)
+      top = Style.position(child.style(:top), extent)
+      return top if top
+
+      bottom = Style.position(child.style(:bottom), extent)
+      bottom ? extent - bottom - child.height : 0
+    end
+
+    def layout_stack(kids, content_width, available_height = nil)
       _pl, pt, = padding
       pl = padding[0]
       y = pt
       kids.each do |child|
         cml, cmt, _cmr, cmb = child.margin
-        child.measure(content_width)
+        child.measure(content_width, available_height)
         child.x = pl + cml
         child.y = y + cmt
         y += cmt + child.height + cmb
@@ -70,14 +97,14 @@ module Clogs
       y - pt
     end
 
-    def layout_flow(kids, content_width)
+    def layout_flow(kids, content_width, available_height = nil)
       pl, pt, = padding
       x = 0
       y = 0
       line_height = 0
       kids.each do |child|
         cml, cmt, cmr, cmb = child.margin
-        child.measure(content_width)
+        child.measure(content_width, available_height)
         advance = cml + child.width + cmr
         if x.positive? && x + advance > content_width
           y += line_height
@@ -92,17 +119,39 @@ module Clogs
       y + line_height
     end
 
+    # A slot with an explicit size clips its contents, as Shoes 3 did --
+    # Hackety Hack's sidebar tooltip relies on it by growing the slot on
+    # hover.
+    def clip_contents?
+      !style(:width).nil? && !style(:height).nil?
+    end
+
     def paint(painter, ox, oy)
       @abs_x = ox + @x
       @abs_y = oy + @y
 
-      decorations.grep(Background).each { |d| d.paint_for_slot(painter, @abs_x, @abs_y, @width, @height) }
+      decorations.grep(Background).each do |d|
+        d.paint_for_slot(painter, @abs_x, @abs_y, @width, @height) unless d.hidden?
+      end
+      if clip_contents?
+        painter.save do |p|
+          p.clip_rect(@abs_x, @abs_y, @width, @height)
+          paint_children(p)
+        end
+      else
+        paint_children(painter)
+      end
+      decorations.grep(Border).each do |d|
+        d.paint_for_slot(painter, @abs_x, @abs_y, @width, @height) unless d.hidden?
+      end
+    end
+
+    def paint_children(painter)
       @children.each do |child|
         next if child.hidden? || child.is_a?(Background) || child.is_a?(Border)
 
         child.paint(painter, @abs_x, @abs_y)
       end
-      decorations.grep(Border).each { |d| d.paint_for_slot(painter, @abs_x, @abs_y, @width, @height) }
     end
   end
 

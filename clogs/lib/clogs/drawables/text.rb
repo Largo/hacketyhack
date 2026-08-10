@@ -4,6 +4,15 @@ require_relative "../drawable"
 require_relative "../paragraph"
 
 module Clogs
+  # `nostroke` reaches drawables as a fully transparent colour. For shapes
+  # that means "don't stroke", but Shoes text never disappears that way -- a
+  # text drawable that inherited the transparent draw-context stroke falls
+  # back to the colour it would otherwise have had.
+  def self.text_color(value, fallback)
+    c = Style.color(value, nil)
+    c && c[3].to_i.positive? ? c : fallback
+  end
+
   # The display side of Shoes' inline text drawables: strong, em, code, link,
   # span and friends. These have no geometry of their own -- they contribute
   # styled runs to whichever paragraph contains them.
@@ -20,7 +29,7 @@ module Clogs
     def own_style(base)
       s = style_for_tag(base)
       s = s.with(size: resolved_size(s.size)) if style(:size)
-      s = s.with(color: Style.color(style(:stroke), s.color)) if style(:stroke)
+      s = s.with(color: Clogs.text_color(style(:stroke), s.color)) if style(:stroke)
       s = s.with(bg: Style.color(style(:fill), s.bg)) if style(:fill)
       s = s.with(family: style(:family)) if style(:family)
       s = s.with(underline: true) if truthy_underline?
@@ -82,7 +91,7 @@ module Clogs
   end
 
   class Fg < TextDrawable
-    def style_for_tag(base) = base.with(color: Style.color(style(:stroke), base.color))
+    def style_for_tag(base) = base.with(color: Clogs.text_color(style(:stroke), base.color))
   end
 
   # A clickable run of text. Clicks are routed by the containing paragraph,
@@ -118,7 +127,7 @@ module Clogs
         bold: style(:font_weight).to_s == "bold",
         italic: %w[italic oblique].include?(style(:emphasis).to_s),
         underline: false,
-        color: Style.color(style(:stroke), [0, 0, 0, 255]),
+        color: Clogs.text_color(style(:stroke), [0, 0, 0, 255]),
         bg: Style.color(style(:fill), nil),
         owner: self
       )
@@ -132,12 +141,12 @@ module Clogs
       end
     end
 
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       ml, _mt, mr, = margin
       avail = requested_width(available_width) || (available_width - ml - mr)
       @paragraph = Paragraph.new(Clogs.expand_text_items(style(:text_items), base_style), avail, align: align)
       @width = requested_width(available_width) || [@paragraph.width.ceil, avail].min
-      @height = requested_height(available_width) || @paragraph.height.ceil
+      @height = requested_height(available_height) || @paragraph.height.ceil
     end
 
     def draw(painter, x, y)

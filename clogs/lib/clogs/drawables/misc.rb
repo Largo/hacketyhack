@@ -21,7 +21,7 @@ module Clogs
       Array(style(:args))
     end
 
-    def measure(_available_width)
+    def measure(_available_width, _available_height = nil)
       @width = 0
       @height = 0
     end
@@ -84,9 +84,9 @@ module Clogs
   class Mask < Slot; end
 
   class Video < Drawable
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = requested_width(available_width) || 320
-      @height = requested_height(available_width) || 240
+      @height = requested_height(available_height) || 240
     end
 
     # libui has no media support at all, so this is an honest placeholder
@@ -102,7 +102,7 @@ module Clogs
   end
 
   class Arrow < ArtDrawable
-    def measure(available_width)
+    def measure(available_width, _available_height = nil)
       @width = Style.dimension(style(:width), available_width).to_i
       @height = (@width / 2.0).round
     end

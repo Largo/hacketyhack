@@ -19,18 +19,36 @@ module Clogs
       case value
       when nil then nil
       when Integer
-        value.negative? ? [available + value, 0].max : value
+        if value.negative?
+          available.nil? ? nil : [available + value, 0].max
+        else
+          value
+        end
       when Float
-        value <= 1.0 && value >= -1.0 ? (available * value).round : value.round
+        if value <= 1.0 && value >= -1.0
+          available.nil? ? nil : (available * value).round
+        else
+          value.round
+        end
       when String
         if value.end_with?("%")
-          (available * value.to_f / 100.0).round
+          available.nil? ? nil : (available * value.to_f / 100.0).round
         else
           value.to_i
         end
       else
         value.respond_to?(:to_i) ? value.to_i : nil
       end
+    end
+
+    # Resolve a Shoes position against the slot's extent. Unlike a dimension,
+    # a negative position is a literal coordinate -- Shoes programs place
+    # things offscreen (`stack :top => -400`) and animate them in.
+    def position(value, available)
+      return value if value.is_a?(Integer) && value.negative?
+      return value.round if value.is_a?(Float) && value < -1.0
+
+      dimension(value, available)
     end
 
     # Shoes colours reach the display service as [r, g, b, a] arrays, but user

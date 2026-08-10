@@ -94,36 +94,62 @@ module Clogs
       @context = context
       @width = width
       @height = height
+      # Track the clip rectangle ourselves: painting a bitmap costs one path
+      # per run of pixels, so knowing what cannot be visible pays for itself
+      # many times over. Transforms make the tracked rect meaningless, so any
+      # transform widens it to "everything" for the rest of its scope.
+      @clip_bounds = [[0, 0, width, height]]
+    end
+
+    UNBOUNDED = [-1e9, -1e9, 2e9, 2e9].freeze
+
+    # True if a rectangle can touch the current clip region at all.
+    def visible?(x, y, w, h)
+      cx, cy, cw, ch = @clip_bounds.last
+      x < cx + cw && x + w > cx && y < cy + ch && y + h > cy
     end
 
     # libui has no "unclip" and no way to read back the current transform, so
     # every clip or transform must be scoped by save/restore.
     def save
+      @clip_bounds.push(@clip_bounds.last)
       UI::L.draw_save(@context)
       yield self
     ensure
       UI::L.draw_restore(@context)
+      @clip_bounds.pop
     end
 
     def translate(x, y)
       return if x.zero? && y.zero?
 
+      @clip_bounds[-1] = UNBOUNDED
       apply_matrix { |m| UI::L.draw_matrix_translate(m, x, y) }
     end
 
     def rotate(degrees, cx = 0, cy = 0)
+      @clip_bounds[-1] = UNBOUNDED
       apply_matrix { |m| UI::L.draw_matrix_rotate(m, cx, cy, degrees * Math::PI / 180.0) }
     end
 
     def scale(sx, sy, cx = 0, cy = 0)
+      @clip_bounds[-1] = UNBOUNDED
       apply_matrix { |m| UI::L.draw_matrix_scale(m, cx, cy, sx, sy) }
     end
 
     def skew(ax, ay, cx = 0, cy = 0)
+      @clip_bounds[-1] = UNBOUNDED
       apply_matrix { |m| UI::L.draw_matrix_skew(m, cx, cy, ax * Math::PI / 180.0, ay * Math::PI / 180.0) }
     end
 
     def clip_rect(x, y, w, h)
+      cx, cy, cw, ch = @clip_bounds.last
+      nx1 = [x, cx].max
+      ny1 = [y, cy].max
+      nx2 = [x + w, cx + cw].min
+      ny2 = [y + h, cy + ch].min
+      @clip_bounds[-1] = [nx1, ny1, [nx2 - nx1, 0].max, [ny2 - ny1, 0].max]
+
       p = Path.new(WINDING)
       p.rect(x, y, w, h).end!
       UI::L.draw_clip(@context, p.ptr)
@@ -133,6 +159,7 @@ module Clogs
 
     def fill_rect(x, y, w, h, paint)
       return if w <= 0 || h <= 0
+      return unless visible?(x, y, w, h)
 
       draw(fill: paint) { |p| p.rect(x, y, w, h) }
     end
@@ -172,6 +199,13 @@ module Clogs
 
     def draw_text(layout, x, y)
       UI::L.draw_text(@context, layout, x, y)
+    end
+
+    # Fill an already-built, already-ended path. Callers that draw the same
+    # geometry every frame (images) keep their paths and brushes alive and
+    # skip the whole path-building round trip.
+    def fill_path(path, paint)
+      UI::L.draw_fill(@context, path.ptr, brush_for(paint).to_ptr)
     end
 
     private

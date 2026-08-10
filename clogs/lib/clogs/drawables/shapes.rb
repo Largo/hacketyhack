@@ -22,11 +22,11 @@ module Clogs
     end
 
     def left
-      Style.dimension(style(:left), parent_content_width).to_i
+      Style.position(style(:left), parent_content_width).to_i
     end
 
     def top
-      Style.dimension(style(:top), parent_content_width).to_i
+      Style.position(style(:top), parent_content_width).to_i
     end
 
     def parent_content_width
@@ -86,9 +86,9 @@ module Clogs
   end
 
   class Rect < ArtDrawable
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = Style.dimension(style(:width), available_width).to_i
-      @height = Style.dimension(style(:height), available_width).to_i
+      @height = Style.dimension(style(:height), available_height || available_width).to_i
     end
 
     def draw(painter, x, y)
@@ -106,13 +106,13 @@ module Clogs
   end
 
   class Oval < ArtDrawable
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       radius = style(:radius)
       if radius && !style(:width)
         @width = @height = radius.to_i * 2
       else
         @width = Style.dimension(style(:width), available_width).to_i
-        @height = Style.dimension(style(:height), available_width).to_i
+        @height = Style.dimension(style(:height), available_height || available_width).to_i
       end
     end
 
@@ -128,9 +128,9 @@ module Clogs
   end
 
   class Line < ArtDrawable
-    def measure(available_width)
-      @x2 = Style.dimension(style(:x2), available_width).to_i
-      @y2 = Style.dimension(style(:y2), available_width).to_i
+    def measure(available_width, available_height = nil)
+      @x2 = Style.position(style(:x2), available_width).to_i
+      @y2 = Style.position(style(:y2), available_height || available_width).to_i
       @width = (@x2 - left).abs
       @height = (@y2 - top).abs
     end
@@ -158,7 +158,7 @@ module Clogs
       (style(:inner) || 50).to_f
     end
 
-    def measure(_available_width)
+    def measure(_available_width, _available_height = nil)
       @width = @height = (outer * 2).round
     end
 
@@ -179,9 +179,9 @@ module Clogs
   end
 
   class Arc < ArtDrawable
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = Style.dimension(style(:width), available_width).to_i
-      @height = Style.dimension(style(:height), available_width).to_i
+      @height = Style.dimension(style(:height), available_height || available_width).to_i
     end
 
     def draw(painter, x, y)
@@ -203,7 +203,7 @@ module Clogs
   # `shape { move_to ...; line_to ... }` -- Shoes records the commands and the
   # display service replays them.
   class Shape < ArtDrawable
-    def measure(_available_width)
+    def measure(_available_width, _available_height = nil)
       xs = []
       ys = []
       Array(style(:shape_commands)).each do |cmd|
@@ -245,11 +245,27 @@ module Clogs
       @height = height
     end
 
-    def measure(_available_width); end
+    def measure(_available_width, _available_height = nil); end
+
+    # A decoration covers its slot by default, but Shoes 3 lets it carry its
+    # own geometry: `background "#cdc", :width => 38` paints a stripe, and
+    # `:height => 150, :bottom => 150` a band anchored above the bottom edge.
+    def rect_for_slot(x, y, w, h)
+      dw = Style.dimension(style(:width), w) || w
+      dh = Style.dimension(style(:height), h) || h
+      left = Style.position(style(:left), w)
+      right = Style.position(style(:right), w)
+      top = Style.position(style(:top), h)
+      bottom = Style.position(style(:bottom), h)
+      dx = left || (right ? w - right - dw : 0)
+      dy = top || (bottom ? h - bottom - dh : 0)
+      [x + dx, y + dy, dw, dh]
+    end
   end
 
   class Background < SlotDecoration
-    def paint_for_slot(painter, x, y, w, h)
+    def paint_for_slot(painter, slot_x, slot_y, slot_w, slot_h)
+      x, y, w, h = rect_for_slot(slot_x, slot_y, slot_w, slot_h)
       @abs_x = x
       @abs_y = y
       @width = w
@@ -281,7 +297,8 @@ module Clogs
   end
 
   class Border < SlotDecoration
-    def paint_for_slot(painter, x, y, w, h)
+    def paint_for_slot(painter, slot_x, slot_y, slot_w, slot_h)
+      x, y, w, h = rect_for_slot(slot_x, slot_y, slot_w, slot_h)
       @abs_x = x
       @abs_y = y
       @width = w

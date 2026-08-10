@@ -98,10 +98,11 @@ module Clogs
       !!style(:hidden)
     end
 
-    # A drawable with an explicit left/top is taken out of the normal flow and
-    # placed at those coordinates within its slot, exactly as in Shoes.
+    # A drawable with an explicit position is taken out of the normal flow and
+    # placed at those coordinates within its slot, exactly as in Shoes. Any of
+    # the four edge styles lifts it out; a missing coordinate defaults to 0.
     def positioned?
-      !style(:left).nil? && !style(:top).nil?
+      !!(style(:left) || style(:top) || style(:right) || style(:bottom))
     end
 
     def margin
@@ -118,10 +119,12 @@ module Clogs
 
     # ---- layout -------------------------------------------------------
 
-    # Subclasses override. Must set @width and @height.
-    def measure(available_width)
+    # Subclasses override. Must set @width and @height. Heights resolve
+    # against the vertical space when the parent knows it; a parent sizing
+    # itself to its contents passes nil.
+    def measure(available_width, available_height = nil)
       @width = requested_width(available_width) || 0
-      @height = requested_height(available_width) || 0
+      @height = requested_height(available_height) || 0
     end
 
     def paint(painter, ox, oy)

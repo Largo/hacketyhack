@@ -56,6 +56,7 @@ module Clogs
       "Star" => "Star",
       "Arc" => "Arc",
       "Background" => "Background",
+      "BackgroundDrawable" => "Background",
       "Border" => "Border",
       "SubscriptionItem" => "SubscriptionItem"
     }.freeze

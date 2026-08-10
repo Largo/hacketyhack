@@ -83,7 +83,9 @@ module Clogs
       install_test_hooks
       UI::L.main
       # libui aborts on exit if a control is still alive, so tear the window
-      # down explicitly. Destroying the window destroys its children.
+      # down explicitly. Destroying the window destroys its children. Cached
+      # image paths count as live objects too.
+      Image.free_all_paths
       UI::L.control_destroy(@window) if @window
       @window = nil
       # Anything that runs after the window is gone -- at_exit handlers, an
@@ -169,9 +171,10 @@ module Clogs
       painter.fill_rect(0, 0, painter.width, painter.height, BACKGROUND)
       return unless @document_root
 
-      if @needs_layout || @last_width != painter.width
-        @document_root.measure(painter.width)
+      if @needs_layout || @last_width != painter.width || @last_height != painter.height
+        @document_root.measure(painter.width, painter.height)
         @last_width = painter.width
+        @last_height = painter.height
         @needs_layout = false
       end
       @document_root.paint(painter, 0, 0)
@@ -232,8 +235,14 @@ module Clogs
     end
 
     def handle_release(event)
-      @pressed&.on_release(event.x, event.y, event.up)
+      # Shoes bubbles a click up through the enclosing slots: clicking the
+      # text inside a button-like widget still fires the widget's handler.
+      peer = @pressed
       @pressed = nil
+      while peer
+        peer.on_release(event.x, event.y, event.up)
+        peer = peer.parent
+      end
       notify_subscribers("release", event.up, event.x.round, event.y.round)
     end
 

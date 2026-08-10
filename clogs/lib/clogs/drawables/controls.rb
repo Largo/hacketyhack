@@ -48,13 +48,13 @@ module Clogs
   end
 
   class Button < Control
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       st = text_style
       tw, th = Paragraph.measure(label.empty? ? " " : label, st)
       @text_width = tw
       @text_height = th
       @width = requested_width(available_width) || (tw + PADDING_X * 2).ceil
-      @height = requested_height(available_width) ||
+      @height = requested_height(available_height) ||
         (th + PADDING_Y * 2 + style(:padding_top).to_i + style(:padding_bottom).to_i).ceil
     end
 
@@ -94,7 +94,7 @@ module Clogs
   class Check < Control
     BOX = 16
 
-    def measure(_available_width)
+    def measure(_available_width, _available_height = nil)
       @width = BOX
       @height = BOX
     end
@@ -122,7 +122,7 @@ module Clogs
   class Radio < Control
     BOX = 16
 
-    def measure(_available_width)
+    def measure(_available_width, _available_height = nil)
       @width = BOX
       @height = BOX
     end
@@ -152,9 +152,9 @@ module Clogs
   end
 
   class Progress < Control
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = requested_width(available_width) || [available_width, 200].min
-      @height = requested_height(available_width) || 14
+      @height = requested_height(available_height) || 14
     end
 
     def draw(painter, x, y)
@@ -365,11 +365,11 @@ module Clogs
       style(:secret) ? "•" * text_value.length : text_value
     end
 
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = requested_width(available_width) || [available_width, 200].min
       st = text_style
       @line_height = Paragraph.line_height(st)
-      @height = requested_height(available_width) || (@line_height + PADDING_Y * 2).ceil
+      @height = requested_height(available_height) || (@line_height + PADDING_Y * 2).ceil
     end
 
     def draw(painter, x, y)
@@ -435,11 +435,11 @@ module Clogs
       true
     end
 
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = requested_width(available_width) || [available_width, 300].min
       st = text_style
       @line_height = Paragraph.line_height(st)
-      @height = requested_height(available_width) || (@line_height * 6 + PADDING_Y * 2).ceil
+      @height = requested_height(available_height) || (@line_height * 6 + PADDING_Y * 2).ceil
       @paragraph = Paragraph.new([[text_value.empty? ? " " : text_value, st]], @width - 12)
     end
 
@@ -487,9 +487,9 @@ module Clogs
       style(:chosen) || items.first
     end
 
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       @width = requested_width(available_width) || [available_width, 200].min
-      @height = requested_height(available_width) || (Clogs.default_font_size + PADDING_Y * 2).ceil
+      @height = requested_height(available_height) || (Clogs.default_font_size + PADDING_Y * 2).ceil
     end
 
     def draw(painter, x, y)

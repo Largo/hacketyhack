@@ -22,6 +22,17 @@ module Clogs
         @cache ||= {}
       end
 
+      # Images holding live libui path objects. libui aborts at uninit if any
+      # path is still alive, so the app frees them all on teardown -- including
+      # images in subtrees that were removed from the document.
+      def with_live_paths
+        @with_live_paths ||= []
+      end
+
+      def free_all_paths
+        with_live_paths.dup.each(&:free_paths)
+      end
+
       # Load an image and reduce it to per-row colour runs at the requested
       # size. Cached by [path, width, height].
       def runs_for(url, width, height)
@@ -157,13 +168,9 @@ module Clogs
       end
     end
 
-    def positioned?
-      !style(:left).nil? && !style(:top).nil?
-    end
-
-    def measure(available_width)
+    def measure(available_width, available_height = nil)
       req_w = requested_width(available_width)
-      req_h = requested_height(available_width)
+      req_h = requested_height(available_height)
       loaded = self.class.runs_for(style(:url), req_w, req_h)
       if loaded
         @runs, @width, @height = loaded
@@ -181,10 +188,45 @@ module Clogs
           [200, 200, 200, 255], thickness: 1)
         return
       end
+      return unless painter.visible?(x, y, @width, @height)
 
-      @runs.each do |rx, ry, rw, rh, color|
-        painter.fill_rect(x + rx, y + ry, rw, rh, color)
+      # A photograph is thousands of runs, and rebuilding a path per run per
+      # frame is what makes bitmaps slow. Build one path and one brush per
+      # colour, once, in image-local coordinates; every later frame is just a
+      # translate and one fill call per colour.
+      painter.save do |p|
+        p.translate(x, y)
+        color_paths.each { |brush, path| p.fill_path(path, brush) }
       end
+    end
+
+    def color_paths
+      return @color_paths if @color_paths && @color_paths_runs.equal?(@runs)
+
+      free_paths
+      by_color = Hash.new { |h, k| h[k] = [] }
+      @runs.each { |rx, ry, rw, rh, color| by_color[color] << [rx, ry, rw, rh] }
+      @color_paths = by_color.map do |color, rects|
+        path = Path.new(Painter::WINDING)
+        rects.each { |r| path.rect(*r) }
+        path.end!
+        [UI.solid_brush(color), path]
+      end
+      @color_paths_runs = @runs
+      Image.with_live_paths << self
+      @color_paths
+    end
+
+    def free_paths
+      @color_paths&.each { |_brush, path| path.free }
+      @color_paths = nil
+      @color_paths_runs = nil
+      Image.with_live_paths.delete(self)
+    end
+
+    def destroy_self
+      free_paths
+      super
     end
 
     def clickable?
