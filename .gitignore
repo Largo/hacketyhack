@@ -3,3 +3,7 @@ root/Home/*
 *.swp
 tags
 .DS_Store
+
+# Release build output
+/dist/
+clogs/*.gem
