@@ -204,6 +204,14 @@ module Clogs
       end
     end
 
+    # The y of the line containing a character index, for caret scrolling.
+    def line_top(char_index)
+      return 0 if @placed.empty?
+
+      item = @placed.find { |i| char_index < i.char_offset + i.text.length } || @placed.last
+      item.y
+    end
+
     # Character index nearest to a point, for text selection.
     def index_at(px, py)
       line = @placed.select { |i| py >= i.y && py < i.y + i.height }

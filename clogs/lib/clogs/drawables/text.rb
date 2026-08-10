@@ -156,6 +156,22 @@ module Clogs
       draw_text_cursor(painter, x, y)
     end
 
+    # Shoes 3 asks a para which character sits under a window point (nil when
+    # the point is outside the para) and where the caret's line starts, for
+    # keeping it scrolled into view.
+    def hit(x, y)
+      return nil unless @paragraph && !@abs_x.nil?
+      return nil unless contains?(x, y)
+
+      @paragraph.index_at(x - @abs_x, y - @abs_y)
+    end
+
+    def caret_top
+      return 0 unless @paragraph
+
+      @paragraph.line_top(style(:text_cursor).to_i)
+    end
+
     # Shoes' `para.cursor = n` puts a caret at character n. libui's text layouts
     # do not expose caret geometry, but Clogs lays out word by word, so the
     # position is a lookup plus one substring measurement.

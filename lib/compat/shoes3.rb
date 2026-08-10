@@ -208,16 +208,62 @@ class Shoes::App
 end
 
 class Shoes::Para
-  # Shoes 3's `para.cursor = n` put a text caret at character n. Clogs draws it.
+  # Shoes 3's `para.cursor = n` put a text caret at character n, and `marker`
+  # was the selection anchor. `cursor = :marker` moved the caret to the
+  # marker. Clogs draws the caret.
   shoes_styles :text_cursor unless shoes_style_name?(:text_cursor)
+  shoes_styles :marker unless shoes_style_name?(:marker)
 
   def cursor=(position)
+    # `cursor = :marker` collapses the selection: caret moves to the marker,
+    # or stays put when no marker is set.
+    position = marker || text_cursor if position == :marker
     self.text_cursor = position
   end unless method_defined?(:cursor=)
 
   def cursor
     text_cursor
   end unless method_defined?(:cursor)
+
+  # Shoes 3's `para.highlight` is the selection as [position, length]:
+  # zero-length at the caret when no marker is set.
+  def highlight
+    c = text_cursor.to_i
+    m = marker
+    m.nil? ? [c, 0] : [[c, m].min, (c - m).abs]
+  end unless method_defined?(:highlight)
+
+  # Shoes 3's hit-testing and caret geometry, answered by the display side:
+  # `hit(x, y)` is the character index under a window point (nil outside the
+  # para), `cursor_top` the caret line's y within the para.
+  def hit(x, y)
+    peer = __shoes3_display_peer
+    peer.respond_to?(:hit) ? peer.hit(x, y) : nil
+  end unless method_defined?(:hit)
+
+  def cursor_top
+    peer = __shoes3_display_peer
+    peer.respond_to?(:caret_top) ? peer.caret_top : 0
+  end unless method_defined?(:cursor_top)
+
+  private
+
+  def __shoes3_display_peer
+    Shoes::DisplayService.display_service
+      &.query_display_drawable_for(linkable_id, nil_ok: true)
+  rescue StandardError
+    nil
+  end
+end
+
+# Shoes 3 slots scrolled their own contents; Clogs scrolls only the window
+# (see the coverage matrix). Accept the calls so programs run.
+class Shoes::Slot
+  attr_writer :scroll_top unless method_defined?(:scroll_top=)
+
+  def scroll_top
+    @scroll_top || 0
+  end unless method_defined?(:scroll_top)
 end
 
 class Shoes::Drawable
@@ -240,6 +286,17 @@ class Shoes::Drawable
     end
   end
   prepend HashStyleArgs
+end
+
+# Para and the text drawables consume their positional args as text children
+# in their own initialize, before the prepend on Shoes::Drawable ever runs --
+# so `span(token, colors[:any])` would render the style hash as text. Prepend
+# the same conversion directly onto them.
+[Shoes::Para, Shoes::TextDrawable].each do |klass|
+  klass.prepend(Shoes::Drawable::HashStyleArgs)
+end
+
+class Shoes::Drawable
 
   # Shoes 3 could position a drawable from the right or bottom edge of its
   # slot. Lacci has no such styles; register them so they are carried through
@@ -400,6 +457,62 @@ class Shoes::Drawable
     end
   end
   prepend Shoes3StyleAccess
+end
+
+# Shoes 3 exposed a para's text items as `contents`, and each item's `parent`
+# was the para -- Hackety Hack's home tab restyles its links through both.
+# Lacci keeps the items in @text_children and gives text drawables no parent.
+class Shoes::Para
+  def contents
+    Array(@text_children)
+  end unless method_defined?(:contents)
+
+  module Shoes3TextChildren
+    private
+
+    def update_text_children(children)
+      super
+      Array(@text_children).each do |child|
+        child.instance_variable_set(:@__shoes3_para, self) if child.is_a?(Shoes::TextDrawable)
+      end
+    end
+  end
+  prepend Shoes3TextChildren
+end
+
+class Shoes::TextDrawable
+  module Shoes3Parent
+    def parent
+      @__shoes3_para || super
+    end
+  end
+  prepend Shoes3Parent
+end
+
+# Shoes 3's `drawable.left`/`.top` returned the drawable's laid-out position
+# within its slot when no explicit style was set; Lacci only reads the style
+# back (nil). The display side knows where layout put everything.
+class Shoes::Drawable
+  module Shoes3PositionReaders
+    def left
+      super || __shoes3_display_position(:x)
+    end
+
+    def top
+      super || __shoes3_display_position(:y)
+    end
+
+    private
+
+    def __shoes3_display_position(axis)
+      peer = Shoes::DisplayService.display_service
+        &.query_display_drawable_for(linkable_id, nil_ok: true)
+      peer.respond_to?(axis) ? peer.public_send(axis) : nil
+    rescue StandardError
+      nil
+    end
+  end
+  prepend Shoes3PositionReaders
 end
 
 # Shoes 3 animations respond to `stop`. Lacci has no lifecycle control for

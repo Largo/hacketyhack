@@ -52,6 +52,10 @@ module Clogs
     end
 
     def properties_changed(_changes)
+      # Margins and paddings are memoized from styles; a style change must
+      # drop the memo or `t.margin_top = 10` never reaches the layout.
+      @margin = nil
+      @padding = nil
       needs_layout!
     end
 
