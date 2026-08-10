@@ -231,6 +231,11 @@ class Shoes::Drawable
       unless is_a?(Shoes::Widget)
         kwargs = args.pop.transform_keys(&:to_sym).merge(kwargs) if args.last.is_a?(Hash)
       end
+      # Shoes 3 called the bold style :weight; Lacci calls it :font_weight.
+      if kwargs.key?(:weight) && self.class.shoes_style_name?(:font_weight)
+        weight = kwargs.delete(:weight)
+        kwargs[:font_weight] ||= weight
+      end
       super(*args, **kwargs, &block)
     end
   end
@@ -240,6 +245,12 @@ class Shoes::Drawable
   # slot. Lacci has no such styles; register them so they are carried through
   # to the display service, where Clogs' layout understands them.
   shoes_styles :bottom, :right unless shoes_style_name?(:bottom)
+
+  # Shoes 3 styles Lacci does not define, registered so programs load without
+  # warnings: trim-wrapping paragraphs and inner-slot scrolling stay
+  # unimplemented (see the coverage matrix).
+  Shoes::Para.shoes_styles :wrap unless Shoes::Para.shoes_style_name?(:wrap)
+  Shoes::Slot.shoes_styles :scroll unless Shoes::Slot.shoes_style_name?(:scroll)
 
   # Shoes 3's `start` and `finish` fire when a slot is first drawn and when it
   # goes away. Lacci has no slot lifecycle events yet, so `finish` blocks run
@@ -368,6 +379,44 @@ class Shoes::Shape
     end
   end
   prepend Shoes3Origin
+end
+
+# Shoes 3's `drawable.style` returns the styles as a symbol-keyed hash, and
+# `drawable.style :key => val` sets styles. Lacci's version returns string
+# keys, needs the app's feature list for a plain read, and its setter path
+# writes instance variables without telling the display service -- so the
+# change never reaches the screen. Route sets through the real setters.
+class Shoes::Drawable
+  module Shoes3StyleAccess
+    def style(*args, **kwargs)
+      if args.empty? && kwargs.empty?
+        shoes_style_values(with_features: :all).transform_keys(&:to_sym)
+      elsif args.empty?
+        kwargs.each { |name, value| send("#{name}=", value) }
+        nil
+      else
+        super
+      end
+    end
+  end
+  prepend Shoes3StyleAccess
+end
+
+# Shoes 3 animations respond to `stop`. Lacci has no lifecycle control for
+# subscription items, but destroying one stops its timer.
+class Shoes::SubscriptionItem
+  def stop
+    destroy
+  end unless method_defined?(:stop)
+end
+
+# Shoes 3 patched Range#rand: `(10..80).rand` picks a random member. An
+# integer range excludes its end -- Hackety Hack indexes arrays with it.
+class Range
+  def rand
+    result = Kernel.rand * (self.end - self.begin) + self.begin
+    self.begin.is_a?(Integer) && self.end.is_a?(Integer) ? result.to_i : result
+  end unless method_defined?(:rand)
 end
 
 # Shoes 3 let you reposition any drawable after creating it.
