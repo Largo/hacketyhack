@@ -108,6 +108,14 @@ class Shoes
 
     module_function
 
+    # The display-side peer of a drawable: it knows where layout put things.
+    def display_peer(drawable)
+      Shoes::DisplayService.display_service
+        &.query_display_drawable_for(drawable.linkable_id, nil_ok: true)
+    rescue StandardError
+      nil
+    end
+
     def open_url(url)
       opener = case RUBY_PLATFORM
       when /darwin/ then "open"
@@ -264,6 +272,48 @@ class Shoes::Slot
   def scroll_top
     @scroll_top || 0
   end unless method_defined?(:scroll_top)
+end
+
+# Shoes 3 fires a slot's click/release/hover/leave handlers only when the
+# pointer is inside the slot. Lacci models them as app-wide subscriptions,
+# so every button's handler fired on every click anywhere -- one click on
+# "Save" also ran "New Program" and "Upload", stacking their dialogs. Wrap
+# each handler in a hit test against the slot's laid-out box.
+class Shoes::Slot
+  module Shoes3PositionalEvents
+    %i[click release].each do |event|
+      define_method(event) do |*args, &blk|
+        return super(*args, &blk) unless blk
+
+        slot = self
+        super(*args) do |button, x, y|
+          peer = Shoes::Compat.display_peer(slot)
+          blk.call(button, x, y) if peer.respond_to?(:contains?) && peer.contains?(x, y)
+        end
+      end
+    end
+
+    # Hover and leave arrive as app-global "the hover target changed" events
+    # with no coordinates; the pointer's position decides whether this slot
+    # was entered or left.
+    %i[hover leave].each do |event|
+      define_method(event) do |*args, &blk|
+        return super(*args, &blk) unless blk
+
+        slot = self
+        was_inside = false
+        super(*args) do |*cb_args|
+          peer = Shoes::Compat.display_peer(slot)
+          _b, mx, my = Clogs::App.instance&.mouse_state
+          inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
+          fire = event == :hover ? inside && !was_inside : !inside && was_inside
+          was_inside = inside
+          blk.call(*cb_args) if fire
+        end
+      end
+    end
+  end
+  prepend Shoes3PositionalEvents
 end
 
 class Shoes::Drawable

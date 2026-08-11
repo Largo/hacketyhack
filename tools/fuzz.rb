@@ -43,22 +43,40 @@ if SEED.odd?
 end
 
 # Dialogs are real modal windows and would hang an unattended run: answer
-# them deterministically instead. Clipboard access shells out to xclip and
-# would clobber the desktop clipboard. Nothing may open a browser.
+# them deterministically instead, and log each one -- a dialog storm (the
+# same prompt over and over) is itself a finding worth seeing in the seed
+# log. `ask` answers a fresh name each time so "already taken" loops can
+# advance. Clipboard access shells out to xclip and would clobber the
+# desktop clipboard. Nothing may open a browser.
 module Clogs::Dialogs
-  def self.alert(*); nil; end
-
-  def self.confirm(*)
-    RNG.rand < 0.5
+  def self.fuzz_answer(kind, args, answer)
+    warn "FUZZ-DIALOG #{kind}(#{args.last.to_s.lines.first.to_s.strip[0, 60].inspect}) -> #{answer.inspect}"
+    answer
   end
 
-  def self.ask(*)
-    "fuzz"
+  def self.alert(*args)
+    fuzz_answer(:alert, args, nil)
   end
 
-  def self.open_file(*); nil; end
-  def self.save_file(*); nil; end
-  def self.open_folder(*); nil; end
+  def self.confirm(*args)
+    fuzz_answer(:confirm, args, RNG.rand < 0.5)
+  end
+
+  def self.ask(*args)
+    fuzz_answer(:ask, args, "fuzz-#{RNG.rand(100_000)}")
+  end
+
+  def self.open_file(*args)
+    fuzz_answer(:open_file, args, nil)
+  end
+
+  def self.save_file(*args)
+    fuzz_answer(:save_file, args, nil)
+  end
+
+  def self.open_folder(*args)
+    fuzz_answer(:open_folder, args, nil)
+  end
 end
 
 module Clogs::Clipboard
