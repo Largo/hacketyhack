@@ -304,7 +304,7 @@ class Shoes::Slot
         was_inside = false
         super(*args) do |*cb_args|
           peer = Shoes::Compat.display_peer(slot)
-          _b, mx, my = Clogs::App.instance&.mouse_state
+          _b, mx, my = peer&.app&.mouse_state
           inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
           fire = event == :hover ? inside && !was_inside : !inside && was_inside
           was_inside = inside

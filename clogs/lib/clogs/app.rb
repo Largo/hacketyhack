@@ -10,7 +10,21 @@ module Clogs
   # plumbing that turns libui's callbacks into Shoes events.
   class App < Drawable
     class << self
-      attr_accessor :instance
+      # Every Clogs::App with a live window, in creation order. The first one
+      # created owns the shared libui main loop (see #run); the rest just get
+      # a window serviced by it, and drop out of this list as they close.
+      def instances
+        @instances ||= []
+      end
+
+      # Whether UI::L.init has been called for this process. libui's init and
+      # uninit are process-wide C calls, not per-window, so this is tracked
+      # once here rather than per instance.
+      attr_accessor :libui_initialized
+
+      # The Clogs::App whose #run is blocked inside UI::L.main, servicing the
+      # shared event loop for every window. Nil once every window has closed.
+      attr_accessor :loop_owner
 
       # Set synchronously while a `builtin` event is being handled, so that
       # `ask`/`confirm` can return a value even on Lacci versions that have no
@@ -22,17 +36,22 @@ module Clogs
 
     def initialize(properties)
       super
-      App.instance = self
+      App.instances << self
       @timers = []
       @needs_layout = true
       @focused = nil
       @hovered = nil
       @mouse_state = [0, 0, 0]
 
-      bind_shoes_event(event_name: "init") { init }
-      bind_shoes_event(event_name: "run") { run }
-      bind_shoes_event(event_name: "destroy") { destroy }
-      Shoes::DisplayService.subscribe_to_event("builtin", nil) do |cmd, args|
+      # Targeted at this app's own id so a second Shoes.app's init/run/destroy
+      # doesn't also fire on every other app already running (see
+      # Shoes3AppScopedLifecycleEvents in lacci_compat.rb for the other half
+      # of this -- what makes Shoes::App dispatch with that id instead of
+      # nil in the first place).
+      bind_shoes_event(event_name: "init", target: @shoes_linkable_id) { init }
+      bind_shoes_event(event_name: "run", target: @shoes_linkable_id) { run }
+      bind_shoes_event(event_name: "destroy", target: @shoes_linkable_id) { destroy }
+      Shoes::DisplayService.subscribe_to_event("builtin", @shoes_linkable_id) do |cmd, args|
         App.builtin_response = builtin(cmd, args)
       end
     end
@@ -54,7 +73,10 @@ module Clogs
     end
 
     def init
-      UI::L.init unless @initialized
+      unless App.libui_initialized
+        UI::L.init
+        App.libui_initialized = true
+      end
       @initialized = true
 
       @window = UI::L.new_window(title, app_width, app_height, 0)
@@ -81,18 +103,30 @@ module Clogs
       @running = true
       arm_timers
       install_test_hooks
-      UI::L.main
-      # libui aborts on exit if a control is still alive, so tear the window
-      # down explicitly. Destroying the window destroys its children. Cached
-      # image paths count as live objects too.
-      Image.free_all_paths
-      UI::L.control_destroy(@window) if @window
-      @window = nil
-      # Anything that runs after the window is gone -- at_exit handlers, an
-      # app's own shutdown code -- must not touch the area again. Queueing a
-      # redraw on a destroyed area segfaults.
-      @canvas = nil
-      UI::L.uninit if @initialized
+
+      if App.loop_owner.nil?
+        # First app in the process: own the shared libui loop. Every window
+        # created while this is running -- including nested Shoes.app calls
+        # -- gets serviced by the same UI::L.main, not a loop of its own.
+        App.loop_owner = self
+        UI::L.main
+        # By the time UI::L.main returns, every window (including this one)
+        # has already torn itself down via #destroy -- that's what finally
+        # let the loop's quit take effect (see #destroy). So there's nothing
+        # left to destroy here, only process-wide cleanup. Cached image
+        # paths count as live libui objects too.
+        Image.free_all_paths
+        UI::L.uninit if App.libui_initialized
+        App.libui_initialized = false
+        App.loop_owner = nil
+      else
+        # The shared loop is already running elsewhere. Lacci's Shoes::App#run
+        # assumes a "displaylib" event loop never returns until the app should
+        # exit, and calls destroy() the instant it does -- fine for the loop
+        # owner, but it would slam this window shut right after showing it.
+        # Tell it to just return control to the (outer) loop instead.
+        send_shoes_event("return", event_name: "custom_event_loop", target: @shoes_linkable_id)
+      end
     end
 
     # Hooks for automated testing: run the app for a fixed time, optionally
@@ -124,7 +158,12 @@ module Clogs
 
       @exit_deadline = nil
       capture_screenshot(ENV["CLOGS_SCREENSHOT"]) if ENV["CLOGS_SCREENSHOT"]
-      quit
+      # Every app in the process has its own deadline timer, so in the
+      # ordinary case they all close themselves within a tick of each other.
+      # Cascade explicitly anyway: it's what actually guarantees the process
+      # exits at CLOGS_EXIT_AFTER_MS instead of staggering out to whichever
+      # window's own timer happens to fire last.
+      App.instances.dup.each(&:quit)
     end
 
     def capture_screenshot(path)
@@ -137,7 +176,24 @@ module Clogs
       return if @destroyed
 
       @destroyed = true
-      UI::L.quit
+      App.instances.delete(self)
+      window = @window
+      @window = nil
+      # Anything that runs after the window is gone -- at_exit handlers, an
+      # app's own shutdown code -- must not touch the area again. Queueing a
+      # redraw on a destroyed area segfaults.
+      @canvas = nil
+
+      # Destroying a control from inside its own libui callback (window
+      # close -> quit -> destroy) re-enters the loop's own bookkeeping and
+      # crashes, the same hazard #add_timer documents; queue_main defers it
+      # to a safe point. UI::L.quit ends the *shared* loop for every window
+      # at once, so it must wait until this was the last one standing --
+      # one nested window closing must not take down the whole process.
+      UI::L.queue_main do
+        UI::L.control_destroy(window) if window
+        UI::L.quit if App.instances.empty? && App.loop_owner
+      end
     end
 
     def quit

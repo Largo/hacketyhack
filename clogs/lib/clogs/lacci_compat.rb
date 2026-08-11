@@ -60,7 +60,7 @@ unless Shoes.const_defined?(:BackgroundDrawable)
       self.background_color = color
       # Lacci only sets the creating app around DSL calls that go through
       # Shoes::App#method_missing, so set it here the same way.
-      Shoes::Drawable.with_current_app(@app || Shoes::App.instance) do
+      Shoes::Drawable.with_current_app(@app || Shoes.APPS.last) do
         Shoes::BackgroundDrawable.new(color, **options.transform_keys(&:to_sym))
       end
     end
@@ -68,6 +68,25 @@ unless Shoes.const_defined?(:BackgroundDrawable)
 end
 
 class Shoes::App
+  # Lacci's own App lifecycle events (init/run/destroy, plus the
+  # @watch_for_destroy and @watch_for_event_loop subscriptions set up in
+  # #initialize) all bind and dispatch with no target, which broadcasts to
+  # every Shoes::App in the process. That's harmless with one app, but with
+  # Clogs' :multi_app support a second Shoes.app's init/run/destroy would
+  # fire on every other running app too -- closing one window would destroy
+  # them all. Default the target to this app's own linkable_id whenever a
+  # caller doesn't specify one, so each app's lifecycle events stay its own.
+  module Shoes3AppScopedLifecycleEvents
+    def send_shoes_event(*args, event_name:, target: nil, **kwargs)
+      super(*args, event_name: event_name, target: target || linkable_id, **kwargs)
+    end
+
+    def bind_shoes_event(event_name:, target: nil, &block)
+      super(event_name: event_name, target: target || linkable_id, &block)
+    end
+  end
+  prepend Shoes3AppScopedLifecycleEvents
+
   # `app.clear { ... }` empties the top-level slot and optionally refills it.
   # Animated Shoes programs redraw themselves this way on every frame.
   unless method_defined?(:clear)
@@ -78,10 +97,12 @@ class Shoes::App
   end
 
   # `self.mouse` returns [button, x, y]. Clogs tracks the pointer as libui
-  # reports it.
+  # reports it, per window -- so this has to look up *this* app's own peer,
+  # not just whichever Clogs::App happened to be created most recently.
   unless method_defined?(:mouse)
     def mouse
-      Clogs::App.instance&.mouse_state || [0, 0, 0]
+      peer = Shoes::DisplayService.display_service&.query_display_drawable_for(linkable_id, nil_ok: true)
+      peer&.mouse_state || [0, 0, 0]
     end
   end
 

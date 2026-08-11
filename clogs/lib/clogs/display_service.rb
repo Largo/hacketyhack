@@ -72,19 +72,47 @@ module Clogs
       set_drawable_pairing(drawable_id, peer)
 
       if peer.is_a?(App)
-        @app = peer
+        link_app(drawable_id, app: peer)
       else
         parent = parent_id ? query_display_drawable_for(parent_id, nil_ok: true) : nil
         peer.set_parent(parent)
-        @document_root = peer if peer.is_a?(DocumentRoot)
+        link_app(owning_app_id(drawable_id), document_root: peer) if peer.is_a?(DocumentRoot)
       end
 
-      # Lacci builds the document root *before* the app, so neither one can
-      # simply look the other up on creation. Whichever arrives second links
-      # them: the root is the app's canvas contents but is not its child.
-      @app.document_root = @document_root if @app && @document_root && @app.document_root.nil?
-
       peer
+    end
+
+    def destroy
+      App.instances.dup.each(&:destroy)
+      DisplayService.instance = nil
+    end
+
+    private
+
+    # The Shoes-side linkable_id of the Shoes::App a given drawable was
+    # created under, from Lacci's own drawable registry. Only the
+    # DocumentRoot needs this -- unlike every other drawable, it has no
+    # parent_id linking it back to its app.
+    def owning_app_id(drawable_id)
+      Shoes::Drawable.drawable_by_id(drawable_id, none_ok: true)&.app&.linkable_id
+    end
+
+    # Lacci builds each app's document root *before* its App peer, so with
+    # several apps in flight neither can simply look the other up on
+    # creation, and there's no longer a single global @app/@document_root
+    # pair to fall back on. Track them per app id instead, and link them
+    # whichever order they arrive in -- the root is the app's canvas
+    # contents but is not its child.
+    def link_app(app_id, app: nil, document_root: nil)
+      return unless app_id
+
+      bucket = (@apps_by_id ||= {})[app_id] ||= {}
+      bucket[:app] = app if app
+      bucket[:document_root] = document_root if document_root
+
+      if bucket[:app] && bucket[:document_root] && bucket[:app].document_root.nil?
+        bucket[:app].document_root = bucket[:document_root]
+      end
     end
 
     def build_peer(class_name, properties, is_widget)
@@ -100,11 +128,6 @@ module Clogs
         warn "Clogs: no peer for #{class_name}, ignoring it visually."
         Drawable.new(properties)
       end
-    end
-
-    def destroy
-      @app&.destroy
-      DisplayService.instance = nil
     end
   end
 end
