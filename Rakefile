@@ -93,6 +93,29 @@ task :fuzz do
   crashes = []
   stalls = []
 
+  # A headless X server beats the live desktop for fuzzing: no windows
+  # flashing up, and no dependence on the compositor presenting frames -- on
+  # an idle/locked session GTK paints block, which reads as a hang. Xvfb is
+  # used automatically when installed; FUZZ_DISPLAY=live opts out.
+  xvfb_pid = nil
+  xvfb_display = nil
+  if ENV["FUZZ_DISPLAY"] != "live" && system("which Xvfb > /dev/null 2>&1")
+    n = (90..110).find { |d| !File.exist?("/tmp/.X11-unix/X#{d}") }
+    if n
+      xvfb_display = ":#{n}"
+      xvfb_pid = Process.spawn("Xvfb", xvfb_display, "-screen", "0", "1280x900x24",
+        %i[out err] => File::NULL)
+      sleep 0.1 until File.exist?("/tmp/.X11-unix/X#{n}") || !system("kill -0 #{xvfb_pid} > /dev/null 2>&1")
+      unless File.exist?("/tmp/.X11-unix/X#{n}")
+        Process.wait(xvfb_pid)
+        xvfb_pid = nil
+        xvfb_display = nil
+      end
+      puts "Fuzzing headlessly on Xvfb #{xvfb_display}." if xvfb_display
+    end
+  end
+  puts "Fuzzing on the live display; keep the session awake." unless xvfb_display
+
   seeds.times do |seed|
     home = Dir.mktmpdir("hh-fuzz-home-")
     begin
@@ -102,6 +125,12 @@ task :fuzz do
         "FUZZ_SEED" => seed.to_s,
         "CLOGS_EXIT_AFTER_MS" => ms.to_s
       }
+      if xvfb_display
+        env["DISPLAY"] = xvfb_display
+        env["GDK_BACKEND"] = "x11"
+        env["WAYLAND_DISPLAY"] = nil
+        env["XAUTHORITY"] = nil
+      end
       out, status = Open3.capture2e(env, "timeout", "#{ms / 1000 + 45}",
         RbConfig.ruby, File.join(__dir__, "tools", "fuzz.rb"))
       File.write(File.join(outdir, "seed-#{seed}.log"), out)
@@ -158,9 +187,23 @@ task :fuzz do
   end
   unless stalls.empty?
     puts
-    puts "#{stalls.length} seed(s) timed out: #{stalls.join(", ")}. On a live desktop this " \
-         "usually means the compositor suspended an idle session's frames (keep the " \
-         "session awake, or fuzz under Xvfb); a stall on an active display is a real hang."
+    if xvfb_display
+      puts "#{stalls.length} seed(s) timed out on Xvfb: #{stalls.join(", ")} -- these are real hangs."
+    else
+      puts "#{stalls.length} seed(s) timed out: #{stalls.join(", ")}. On a live desktop this " \
+           "usually means the compositor suspended an idle session's frames (keep the " \
+           "session awake, or install Xvfb for headless runs); a stall on an active " \
+           "display is a real hang."
+    end
+  end
+ensure
+  if xvfb_pid
+    begin
+      Process.kill("TERM", xvfb_pid)
+      Process.wait(xvfb_pid)
+    rescue Errno::ESRCH, Errno::ECHILD
+      nil
+    end
   end
 end
 
