@@ -10,6 +10,13 @@ degree = 0
 color = 0
 size = 0
 
+# Convert degrees to radians. Shoes.app below blocks until the window
+# closes, so this has to be defined before it -- Ruby would never reach a
+# `def` placed after a call that doesn't return until the app exits.
+def to_radians(deg)
+  deg * Math::PI / 180
+end
+
 Shoes.app :width => 537, :height => 500 do
   mx, my = (500/2).to_i, (537/2).to_i
   animate(24) do
@@ -51,10 +58,5 @@ Shoes.app :width => 537, :height => 500 do
       end
     end
   end
-end
-
-# Convert degrees to radians
-def to_radians(deg)
-  deg * Math::PI / 180
 end
 

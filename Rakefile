@@ -210,12 +210,10 @@ end
 # Samples that rely on Shoes 3 features Clogs does not implement yet. See
 # clogs/docs/libui_shoes_coverage.md.
 KNOWN_SAMPLE_FAILURES = [
-  "samples/Animated Flowers.rb",  # Shoes 3 image() canvases
-  "samples/Fractal.rb",           # Shoes 3 image() canvases
-  "samples/Funnies.rb",           # needs Shoes 3 download() semantics
-  "samples/Guessing Game.rb",     # ask() during app init, before the window exists
-  "samples/Turtle Barbwire.rb",   # turtle canvas needs Hackety Hack's own widgets
-  "samples/Turtle Stars.rb"       # turtle canvas needs Hackety Hack's own widgets
+  # ask() genuinely works standalone now (see Clogs::App.ensure_libui!), but
+  # this sample's while loop calls it in a tight, unattended series with
+  # nobody there to answer -- headless CI has no way to pass this one.
+  "samples/Guessing Game.rb"
 ].freeze
 
 task default: [:samples, :boot]

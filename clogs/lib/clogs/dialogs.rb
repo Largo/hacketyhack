@@ -128,9 +128,23 @@ module Clogs
       yield win, box, finish
 
       UI::L.control_show(win)
-      UI::L.main_step(1) until done
+      # This loop is its own, separate event pump -- CLOGS_EXIT_AFTER_MS's
+      # usual enforcement runs from Clogs::App's own paint callback, which
+      # never gets a turn while a modal dialog owns the loop. Without this, a
+      # sample that blocks on ask/confirm/alert with nobody there to answer
+      # (any headless test) would hang until the test harness's own outer
+      # timeout, rather than the deadline the harness actually asked for.
+      deadline = test_deadline
+      UI::L.main_step(1) until done || (deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline)
       UI::L.control_destroy(win)
       _ = parent
+    end
+
+    def test_deadline
+      ms = ENV["CLOGS_EXIT_AFTER_MS"]&.to_i
+      return nil unless ms&.positive?
+
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) + ms / 1000.0
     end
   end
 end

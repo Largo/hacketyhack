@@ -36,7 +36,7 @@ Shoes.app :width => 800, :height => 600 do
       download feed do |dl|
         stack :width => "100%", :margin => 10, :border => 1 do
           c = Comic.new dl.response.body
-          stack :margin_right => gutter do
+          stack :margin_right => 10 do
             background "#333", :curve => 4
             caption c.title, :stroke => "#CD9", :margin => 4
           end

@@ -89,7 +89,6 @@ Shoes::FEATURES << :multi_app unless Shoes::FEATURES.include?(:multi_app)
 unless Shoes::DisplayService.respond_to?(:consume_builtin_response)
   module Shoes::Builtins
     def shoes_builtin(cmd_name, *args)
-      Clogs::App.builtin_response = nil
       # shoes_builtin is mixed into Kernel, so `self` here can be a
       # Shoes::App, any other drawable, or (called from top-level code) plain
       # `main`. Route the dialog to whichever app it actually belongs to, so
@@ -102,8 +101,19 @@ unless Shoes::DisplayService.respond_to?(:consume_builtin_response)
         app
       end
       target_app ||= Shoes.APPS.last
-      Shoes::DisplayService.dispatch_event("builtin", target_app&.linkable_id, cmd_name, args)
-      Clogs::App.builtin_response
+
+      if target_app
+        Clogs::App.builtin_response = nil
+        Shoes::DisplayService.dispatch_event("builtin", target_app.linkable_id, cmd_name, args)
+        Clogs::App.builtin_response
+      else
+        # No Shoes.app has ever been created -- Hackety Hack's own Guessing
+        # Game sample is a bare ask/alert loop with no Shoes.app in sight.
+        # There's no app peer to dispatch the "builtin" event to, so show
+        # the dialog directly instead of silently dropping it.
+        Clogs::App.ensure_libui!
+        Clogs::App.run_builtin(cmd_name, args, nil)
+      end
     end
   end
 end

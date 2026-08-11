@@ -1,8 +1,14 @@
 # a turtle graphics library
 
 require 'thread'
+require 'lib/art/glossb'
 
-class Shoes::TurtleCanvas < Shoes::Widget
+# Not namespaced under Shoes:: like the drawables Lacci itself defines --
+# Shoes::Drawable.inherited registers a widget's *full* name (subclass.name),
+# but create_display_drawable looks it up after stripping a leading "Shoes::"
+# off the class name, so a widget actually living in that namespace can never
+# match and silently gets no display peer at all.
+class TurtleCanvas < Shoes::Widget
   # default values
   WIDTH = 500
   HEIGHT = 500
@@ -18,10 +24,10 @@ class Shoes::TurtleCanvas < Shoes::Widget
 
   def initialize
     @width = WIDTH
-    @height = WIDTH
-    style width => @width, :height => @height
+    @height = HEIGHT
+    style :width => @width, :height => @height
     @queue = Queue.new
-    @image = image "#{HH::STATIC}/turtle.png"
+    @image = image turtle_image_path
     @image.transform :center
     @speed = SPEED
     @paused = true
@@ -175,6 +181,14 @@ class Shoes::TurtleCanvas < Shoes::Widget
   end
 
 private
+  # HH::STATIC only exists once the full app has booted (lib/dev/init.rb) --
+  # this library is also loaded standalone (rake samples, plain `ruby
+  # samples/Turtle*.rb`), so fall back to a path relative to this file.
+  def turtle_image_path
+    static_dir = defined?(HH::STATIC) ? HH::STATIC : File.expand_path("../../static", __dir__)
+    "#{static_dir}/turtle.png"
+  end
+
   def update_position x, y
     @x, @y = x, y
     @image.move(x.round - 16, y.round - 16) unless drawing?
@@ -192,7 +206,7 @@ private
   def move_turtle_to_top
     return if drawing?
     s = @image.style
-    @image = image "#{HH::STATIC}/turtle.png"
+    @image = image turtle_image_path
     @image.style s
   end
 
@@ -244,12 +258,16 @@ module Turtle
   end
 
   def self.start opts={}, &blk
-    w = opts[:width] || Shoes::TurtleCanvas::WIDTH
-    h = opts[:height] || Shoes::TurtleCanvas::HEIGHT
+    w = opts[:width] || TurtleCanvas::WIDTH
+    h = opts[:height] || TurtleCanvas::HEIGHT
     opts[:width] = w + 20
     opts[:height] = h + ( opts[:draw]? 60 : 130)
 
-    Shoes.app opts do
+    # :draw is Turtle's own bookkeeping (interactive vs. draw-straight-to-
+    # canvas mode), read from `opts` throughout this block below -- but
+    # Shoes.app takes real keyword arguments now, not a loose trailing hash,
+    # so an unrecognized key raises ArgumentError instead of being ignored.
+    Shoes.app opts.reject { |k, _| k == :draw } do
       extend Turtle # add methods back (after self changed)
       @block = blk
 

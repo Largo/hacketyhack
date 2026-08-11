@@ -441,27 +441,54 @@ module Clogs
       end
     end
 
+    class << self
+      # Shoes 3 let `ask`/`alert` be called before any window existed --
+      # Hackety Hack's own Guessing Game sample is nothing but a top-level
+      # ask/alert loop, no Shoes.app in sight. libui only needs a window to
+      # show a *parent* dialog under; its own message boxes and the
+      # nested-loop windows Dialogs builds work with no parent at all, so the
+      # only real requirement is that libui itself has been booted.
+      def ensure_libui!
+        return if libui_initialized
+
+        UI::L.init
+        self.libui_initialized = true
+      end
+
+      # The case statement `#builtin` used to run inline against @window;
+      # factored out so a dialog can also run with no owning window (see
+      # ensure_libui!) instead of only ever being reachable through a live
+      # Clogs::App instance.
+      def run_builtin(cmd, args, window)
+        case cmd.to_s
+        when "alert" then Dialogs.alert(window, args[0])
+        when "confirm" then Dialogs.confirm(window, args[0])
+        when "ask" then Dialogs.ask(window, args[0])
+        when "ask_open_file" then Dialogs.open_file(window)
+        when "ask_save_file" then Dialogs.save_file(window)
+        when "ask_open_folder" then Dialogs.open_folder(window)
+        when "ask_color" then nil
+        when "font" then nil
+        end
+      rescue StandardError => e
+        report_error(e)
+        nil
+      end
+
+      def report_error(error)
+        warn "Clogs error: #{error.class}: #{error.message}"
+        warn error.backtrace.first(12).join("\n") if error.backtrace
+      end
+    end
+
     # ---- builtins -----------------------------------------------------
 
     def builtin(cmd, args)
-      case cmd.to_s
-      when "alert" then Dialogs.alert(@window, args[0])
-      when "confirm" then Dialogs.confirm(@window, args[0])
-      when "ask" then Dialogs.ask(@window, args[0])
-      when "ask_open_file" then Dialogs.open_file(@window)
-      when "ask_save_file" then Dialogs.save_file(@window)
-      when "ask_open_folder" then Dialogs.open_folder(@window)
-      when "ask_color" then nil
-      when "font" then nil
-      end
-    rescue StandardError => e
-      report_error(e)
-      nil
+      App.run_builtin(cmd, args, @window)
     end
 
     def report_error(error)
-      warn "Clogs error: #{error.class}: #{error.message}"
-      warn error.backtrace.first(12).join("\n") if error.backtrace
+      App.report_error(error)
     end
   end
 end

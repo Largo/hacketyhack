@@ -425,6 +425,20 @@ class Shoes::Image
     end
   end
   prepend Shoes3Canvas
+
+  # Shoes 3 image objects could set their own rotation anchor and rotate
+  # themselves directly (`image.transform :center; image.rotate(30)`) --
+  # Hackety Hack's Turtle graphics uses this for the little heading arrow.
+  # Clogs renders images as filled rectangles (see the coverage matrix), with
+  # no rotation support yet; accept the calls without crashing rather than
+  # actually rotating anything.
+  def transform(_anchor)
+    self
+  end unless method_defined?(:transform)
+
+  def rotate(_degrees)
+    self
+  end unless method_defined?(:rotate)
 end
 
 # Lacci passes a Widget's block to the widget's own initialize *and* then runs
@@ -489,15 +503,30 @@ class Shoes::Shape
 end
 
 # Shoes 3's `drawable.style` returns the styles as a symbol-keyed hash, and
-# `drawable.style :key => val` sets styles. Lacci's version returns string
-# keys, needs the app's feature list for a plain read, and its setter path
-# writes instance variables without telling the display service -- so the
-# change never reaches the screen. Route sets through the real setters.
+# `drawable.style :key => val` sets styles -- as does `drawable.style(a_hash)`
+# with a hash captured earlier (Hackety Hack's Turtle graphics round-trips
+# one this way to restore an image's styles: `s = @image.style; ...;
+# @image.style s`). A bare local variable isn't the `key: val` call syntax
+# that Ruby turns into keyword arguments, so that form arrives as a single
+# positional Hash instead -- indistinguishable, once inside the method, from
+# Shoes 3's *other* `style` overload, `.style(SomeDrawableClass, ...)` for
+# class-level defaults, which Lacci still needs to see. Lacci's version
+# also returns string keys, needs the app's feature list for a plain read,
+# and its setter path writes instance variables without telling the display
+# service -- so the change never reaches the screen. Route sets through the
+# real setters.
 class Shoes::Drawable
   module Shoes3StyleAccess
     def style(*args, **kwargs)
       if args.empty? && kwargs.empty?
         shoes_style_values(with_features: :all).transform_keys(&:to_sym)
+      elsif args.length == 1 && args[0].is_a?(Hash)
+        # The captured hash is a *read* of every property, including ones
+        # that aren't a settable style at all (shoes_linkable_id, an
+        # identity, not a style) -- only apply keys that really are one.
+        kwargs = args[0].transform_keys(&:to_sym).merge(kwargs)
+        kwargs.each { |name, value| send("#{name}=", value) if self.class.shoes_style_name?(name.to_s) }
+        nil
       elsif args.empty?
         kwargs.each { |name, value| send("#{name}=", value) }
         nil
