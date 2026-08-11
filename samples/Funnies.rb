@@ -22,9 +22,9 @@ Shoes.app :width => 800, :height => 600 do
 
   @title = "Web Funnies"
   @feeds = [
-    "http://xkcd.com/rss.xml",
-    "http://feedproxy.google.com/DilbertDailyStrip?format=xml",
-    "http://www.daybydaycartoon.com/index.xml",
+    "https://xkcd.com/rss.xml",
+    "https://www.smbc-comics.com/comic/rss",
+    "https://existentialcomics.com/rss.xml",
     ]
 
   stack :margin => 10 do

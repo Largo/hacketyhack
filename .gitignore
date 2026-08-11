@@ -7,3 +7,4 @@ tags
 # Release build output
 /dist/
 clogs/*.gem
+tmp/fuzz
