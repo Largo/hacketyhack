@@ -94,7 +94,7 @@ module HH
     end
 
     def script_exists?(name)
-      File.exists?(HH::USER + "/" + name + ".rb")
+      File.exist?(HH::USER + "/" + name + ".rb")
     end
 
     def save_script(name, code)

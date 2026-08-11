@@ -205,6 +205,8 @@ module Clogs
     # geometry every frame (images) keep their paths and brushes alive and
     # skip the whole path-building round trip.
     def fill_path(path, paint)
+      return if path.ptr.nil?
+
       UI::L.draw_fill(@context, path.ptr, brush_for(paint).to_ptr)
     end
 

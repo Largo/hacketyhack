@@ -68,7 +68,7 @@ end
 #
 # Enhancements to the basic number classes.
 #
-class Fixnum
+class Integer
   def ordinalize
     case self
     when 1;  "1st"
