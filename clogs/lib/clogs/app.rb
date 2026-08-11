@@ -285,6 +285,10 @@ module Clogs
       name = key_name(event)
       return false unless name && !event.up
 
+      # Shoes delivers printable characters as strings and everything else --
+      # named keys and modifier combinations -- as symbols: "a" but :backspace,
+      # :home, :control_c. Newline stays a string, as Shoes 3 had it.
+      name = name.to_sym unless name.length == 1 || name == "\n"
       notify_subscribers("keypress", name)
       true
     rescue StandardError => e

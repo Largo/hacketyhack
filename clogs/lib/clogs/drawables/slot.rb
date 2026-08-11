@@ -34,14 +34,18 @@ module Clogs
     end
 
     def measure(available_width, available_height = nil)
-      ml, _mt, mr, _mb = margin
+      ml, mt, mr, mb = margin
       pl, pt, pr, pb = padding
 
-      outer_width = requested_width(available_width) || (available_width - ml - mr)
+      # Shoes 3's box model: a slot's margins live inside its declared width.
+      # `stack :width => 37, :margin_right => 6` occupies 37 pixels with the
+      # content inset -- two columns sized 37 and -37 tile a row exactly.
+      outer_width = (requested_width(available_width) || available_width) - ml - mr
       outer_width = 0 if outer_width.negative?
       content_width = [outer_width - pl - pr, 0].max
 
       requested = requested_height(available_height)
+      requested = [requested - mt - mb, 0].max if requested
       content_avail_height = requested ? [requested - pt - pb, 0].max : available_height
 
       flowed, positioned = laid_out_children.partition { |c| !c.positioned? }

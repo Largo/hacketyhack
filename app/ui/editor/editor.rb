@@ -38,6 +38,7 @@ class HH::SideTabs::Editor < HH::SideTab
     name = ""
     while empty?(name) or HH.script_exists?(name)
       name = ask(msg + "Give your program a name.")
+      return nil if name.nil? # cancelled
       msg = "Come on give your program a name :-)\n" if empty?(name)
       msg = "You already have a program named '" + name + "'.\n" if HH.script_exists?(name)
     end
@@ -205,7 +206,7 @@ class HH::SideTabs::Editor < HH::SideTab
         timer 0.1 do
           @save_button.hide
           @copy_button.show
-          @upload_button.show
+          @upload_button&.show
         end
       end
     end
@@ -244,7 +245,9 @@ class HH::SideTabs::Editor < HH::SideTab
     stack :height => 40, :width => 182, :bottom => -3, :right => 0 do
       copy_button
       save_button
-      upload_button
+      # Uploading needs the hackety-hack.com API; without a connection to it
+      # the button would only ever produce an error dialog.
+      upload_button if Web.internet_connection?
       run_button
     end
   end
@@ -257,7 +260,7 @@ class HH::SideTabs::Editor < HH::SideTab
 
   # do this somewhere else?
   def hide_upload_for_samples(script)
-    @upload_button.hide if script[:sample]
+    @upload_button&.hide if script[:sample]
   end
 
   def draw_content(script = {})
@@ -280,7 +283,7 @@ class HH::SideTabs::Editor < HH::SideTab
     if saved?
       @copy_button.hide
       @save_button.show
-      @upload_button.hide
+      @upload_button&.hide
     end
   end
 

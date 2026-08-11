@@ -143,9 +143,19 @@ module Clogs
 
     def measure(available_width, available_height = nil)
       ml, _mt, mr, = margin
-      avail = requested_width(available_width) || (available_width - ml - mr)
+      req_w = requested_width(available_width)
+      # An explicit width includes the margins, Shoes 3 style.
+      avail = (req_w || available_width) - ml - mr
       @paragraph = Paragraph.new(Clogs.expand_text_items(style(:text_items), base_style), avail, align: align)
-      @width = requested_width(available_width) || [@paragraph.width.ceil, avail].min
+      @width = if req_w
+        avail
+      elsif align != :left
+        # An aligned para spans its slot; aligning inside a text-sized box
+        # would be a no-op.
+        avail
+      else
+        [@paragraph.width.ceil, avail].min
+      end
       @height = requested_height(available_height) || @paragraph.height.ceil
     end
 
