@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Run a Shoes program with Clogs, the way `shoes app.rb` ran one under
+# Shoes 3:
+#
+#   clogs app.rb [args...]
+#
+# Anything after the program's path is left in ARGV for the program itself.
+
+# Hackety Hack keeps a Shoes 3 compatibility layer (hash-style args, its
+# hpricot shim, ...) at lib/compat/shoes3.rb for the legacy samples bundled
+# with it, and that file requires "clogs" itself. Load it when running from
+# that tree, so `clogs samples/*.rb` behaves like `rake samples`; a clogs
+# checkout used on its own just runs plain Clogs.
+shoes3_compat = File.join(Dir.pwd, "lib", "compat", "shoes3.rb")
+if File.exist?(shoes3_compat)
+  require shoes3_compat
+else
+  require "clogs"
+end
+
+path = ARGV.shift
+
+if path.nil? || %w[-h --help].include?(path)
+  warn "usage: clogs FILE.rb [args...]"
+  exit(path.nil? ? 1 : 0)
+end
+
+unless File.exist?(path)
+  warn "clogs: no such file -- #{path}"
+  exit 1
+end
+
+$0 = path
+load File.expand_path(path)

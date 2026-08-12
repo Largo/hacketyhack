@@ -22,10 +22,13 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir[
     "lib/**/*.rb",
+    "exe/*",
     "examples/**/*.rb",
     "README.md",
     "LICENSE.txt"
   ]
+  spec.bindir = "exe"
+  spec.executables = ["clogs"]
   spec.require_paths = ["lib"]
 
   # The Shoes DSL itself.

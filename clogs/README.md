@@ -19,8 +19,12 @@ end
 
 ```
 gem install clogs
-ruby hello.rb
+clogs hello.rb
 ```
+
+`clogs` is a small stand-in for Shoes 3's own `shoes` command: it requires
+`clogs` for you and runs the program you name. `ruby hello.rb` (with a
+top-level `require "clogs"` as above) works exactly the same way.
 
 ## How it fits together
 
