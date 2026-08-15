@@ -6,13 +6,15 @@ require "minitest/autorun"
 require "clogs"
 
 module ClogsTest
-  # Anything that measures text needs libui initialised, which in turn needs a
-  # display. On CI that is Xvfb; locally it is whatever you are already using.
+  # Anything that measures text needs the display library initialised, which in
+  # turn needs a display. On CI that is Xvfb; locally it is whatever you are
+  # already using. Both backends boot through Clogs::App, which knows which one
+  # is selected.
   def self.ui_available?
     return @ui_available unless @ui_available.nil?
 
     @ui_available = begin
-      Clogs::UI::L.init
+      Clogs::App.ensure_libui!
       true
     rescue StandardError
       false

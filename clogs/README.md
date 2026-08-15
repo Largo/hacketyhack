@@ -39,8 +39,16 @@ your Shoes program
         |
       Clogs          layout, painting, widgets, input
         |
-      libui          one native window, one canvas
+   libui  or  FOX    one native window, one canvas
 ```
+
+The bottom layer is swappable. libui is the default; `CLOGS_BACKEND=fox` runs
+the same Clogs on [FXRuby](https://github.com/larskanis/fxruby) instead, which
+blits bitmaps rather than painting them as rectangles and is between 3x and
+118x faster per frame as a result -- at the cost of antialiasing and alpha
+compositing. Both pass the same 11 of 12 Shoes samples. The measurements, the
+trade-offs and `rake compare` are in
+[docs/fox_vs_libui.md](docs/fox_vs_libui.md).
 
 You can also select it explicitly, which is useful when the same program should
 run under Scarpe's webview backend too:

@@ -8,3 +8,14 @@ group :development, :test do
   gem "minitest", "~> 5.0"
   gem "rake", "~> 13.0"
 end
+
+# The alternative FOX backend (CLOGS_BACKEND=fox). FXRuby is a C++ extension
+# needing FOX 1.6's development headers to build -- libfox-1.6-dev and
+# libxrandr-dev on Debian and Ubuntu, fox on Homebrew -- so it is optional:
+#
+#   bundle config set --local with fox && bundle install
+#
+# See docs/fox_vs_libui.md.
+group :fox, optional: true do
+  gem "fxruby", "~> 1.6"
+end

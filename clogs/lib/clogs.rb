@@ -10,14 +10,51 @@ Shoes::Log.instance = Clogs::Log.new
 Shoes::Log.configure_logger(ENV["SCARPE_DEBUG"] ? Shoes::Log::DEFAULT_DEBUG_LOG_CONFIG : Shoes::Log::DEFAULT_LOG_CONFIG)
 
 require_relative "clogs/version"
-require_relative "clogs/ui"
+
+module Clogs
+  # Which display library draws the pixels.
+  #
+  # `libui` is the default and the one Clogs was written against. `fox` is an
+  # alternative backend over FXRuby, kept because the two libraries fail in
+  # opposite directions: libui has Cairo's compositing and transforms but no
+  # way to blit a bitmap, FOX blits bitmaps but has neither a transform stack
+  # nor an alpha channel. Select it with CLOGS_BACKEND=fox, and see
+  # docs/fox_vs_libui.md for what that trade actually costs.
+  BACKENDS = %w[libui fox].freeze
+
+  def self.backend
+    @backend ||= begin
+      name = (ENV["CLOGS_BACKEND"] || "libui").downcase
+      unless BACKENDS.include?(name)
+        raise ArgumentError, "Unknown CLOGS_BACKEND #{name.inspect}, expected one of #{BACKENDS.join(", ")}"
+      end
+
+      name
+    end
+  end
+
+  def self.fox?
+    backend == "fox"
+  end
+end
+
+# A backend supplies the drawing surface, the event source, text measurement
+# and the dialogs. Everything else -- layout, the drawable tree, the widgets
+# Clogs paints for itself -- is shared between them.
+if Clogs.fox?
+  require_relative "clogs/fox/ui"
+  require_relative "clogs/fox/painter"
+  require_relative "clogs/fox/text"
+else
+  require_relative "clogs/ui"
+  require_relative "clogs/painter"
+  require_relative "clogs/text"
+  require_relative "clogs/canvas"
+  require_relative "clogs/dialogs"
+end
 require_relative "clogs/style"
-require_relative "clogs/painter"
-require_relative "clogs/text"
 require_relative "clogs/paragraph"
-require_relative "clogs/canvas"
 require_relative "clogs/clipboard"
-require_relative "clogs/dialogs"
 require_relative "clogs/drawable"
 
 # Clogs: Shoes, worn over libui.
@@ -72,6 +109,14 @@ require_relative "clogs/drawables/controls"
 require_relative "clogs/drawables/image"
 require_relative "clogs/drawables/misc"
 require_relative "clogs/app"
+
+# App and Image are the two classes that are part backend: the rest of each is
+# shared, so the FOX versions reopen them rather than replacing the files.
+if Clogs.fox?
+  require_relative "clogs/fox/app"
+  require_relative "clogs/fox/image"
+end
+
 require_relative "clogs/display_service"
 require_relative "clogs/lacci_compat"
 

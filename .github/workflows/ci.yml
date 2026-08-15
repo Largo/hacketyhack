@@ -79,3 +79,51 @@ jobs:
 
       - name: Boot the IDE
         run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+  fox:
+    name: Clogs on the FOX backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # FXRuby is a C++ extension rather than a prebuilt binary, so FOX 1.6's
+      # headers have to be here before bundle install. libxrandr-dev is not
+      # named by the build but the link step fails without it.
+      - name: Install FOX and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfox-1.6-dev libxrandr-dev libxi-dev \
+                                  libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config set --local with fox
+          bundle install --jobs 4
+
+      # The point of the second backend is that it runs the same programs, so
+      # it is held to the same two checks as libui rather than to a suite of
+      # its own. See clogs/docs/fox_vs_libui.md.
+      - name: Run the bundled Shoes samples on FOX
+        env:
+          CLOGS_BACKEND: fox
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on FOX
+        env:
+          CLOGS_BACKEND: fox
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on FOX
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: fox
+        run: |
+          bundle config set --local with fox
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test

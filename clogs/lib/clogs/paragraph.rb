@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "text"
+# Whichever backend's TextBlock is in play; clogs.rb loads it.
+require_relative "text" unless Clogs.fox?
 
 module Clogs
   # Word-level text layout.
@@ -64,7 +65,8 @@ module Clogs
     end
 
     # An immutable text style. Runs with equal styles can be drawn together.
-    TextStyle = Struct.new(:family, :size, :bold, :italic, :underline, :color, :bg, :owner, keyword_init: true) do
+    TextStyle = Struct.new(:family, :size, :bold, :italic, :underline, :strike, :color, :bg, :owner,
+      keyword_init: true) do
       def cache_key
         @cache_key ||= [family, size, bold, italic].freeze
       end
@@ -75,7 +77,8 @@ module Clogs
 
       def same_run_as?(other)
         family == other.family && size == other.size && bold == other.bold &&
-          italic == other.italic && underline == other.underline && color == other.color
+          italic == other.italic && underline == other.underline && strike == other.strike &&
+          color == other.color
       end
     end
 
@@ -102,12 +105,20 @@ module Clogs
       line_height = 0.0
       char_offset = 0
       max_x = 0.0
+      # Where the line's last visible glyph ends, as opposed to where the pen
+      # ends up. A wrapped line keeps the space that followed its final word,
+      # and measuring to there reports a paragraph wider than the width it was
+      # asked to wrap at -- by however wide a space is in the font, which
+      # differs between display backends. The wrap decision below already
+      # ignores that space; so should the width.
+      line_ink = 0.0
 
       flush_line = lambda do
         align_line(line_start, x, line_height)
-        max_x = [max_x, x].max
+        max_x = [max_x, line_ink].max
         y += line_height.positive? ? line_height : 0
         x = 0.0
+        line_ink = 0.0
         line_height = 0.0
         line_start = @placed.size
       end
@@ -132,6 +143,7 @@ module Clogs
 
           @placed << Placed.new(token, style, x, y, w, h, style.owner, char_offset)
           char_offset += token.length
+          line_ink = x + effective_w
           x += w
           line_height = [line_height, h].max
         end
@@ -166,7 +178,8 @@ module Clogs
         style = first.style
         block = TextBlock.new(
           [Run.new(text: text, size: style.size, family: style.family, bold: style.bold,
-            italic: style.italic, underline: style.underline, color: style.color)],
+            italic: style.italic, underline: style.underline, strike: style.strike,
+            color: style.color)],
           -1,
           default_family: style.family,
           default_size: style.size

@@ -11,6 +11,8 @@ GEM
   specs:
     chunky_png (1.4.0)
     fiddle (1.1.8)
+    fxruby (1.6.50)
+      mini_portile2 (~> 2.1)
     lacci (0.5.0)
       scarpe-components (~> 0.4.0)
     libui (0.2.4)
@@ -23,6 +25,7 @@ GEM
       fiddle
     libui (0.2.4-x86_64-linux)
       fiddle
+    mini_portile2 (2.8.9)
     minitest (5.27.0)
     nokogiri (1.19.4-aarch64-linux-gnu)
       racc (~> 1.4)
@@ -65,21 +68,25 @@ PLATFORMS
 
 DEPENDENCIES
   clogs!
+  fxruby (~> 1.6)
   minitest (~> 5.0)
   nokogiri
   rake
   sqlite3
 
 CHECKSUMS
+  bundler (4.0.18) sha256=02d9a17429de1847b4e0c9f27a9ee4b20c0a74c0a641b4e77195d6019e3618ac
   chunky_png (1.4.0) sha256=89d5b31b55c0cf4da3cf89a2b4ebc3178d8abe8cbaf116a1dba95668502fdcfe
   clogs (0.1.0)
   fiddle (1.1.8) sha256=7fa8ee3627271497f3add5503acdbc3f40b32f610fc1cf49634f083ef3f32eee
+  fxruby (1.6.50) sha256=93cc40a98c66205dc28efe4eb6ea4303e1ef0395919b1b28ff35ff8e04b36983
   lacci (0.5.0) sha256=0fe326ece670774c631439d3e0fa17589cc25bbdb2ea19d867a541b1beea1dde
   libui (0.2.4) sha256=3bf8afb2c6523a08928b21bd850269dcf418940e73193aedaa7fcaab8a61df99
   libui (0.2.4-aarch64-linux) sha256=950ed0dbcf4d939580197ef2c14281cfb7141dd9442accf087538fa7390846ec
   libui (0.2.4-arm64-darwin) sha256=8107b66d9f353fb71896071843aced1a1e939cc860bd38d8648f8dc9469f9c2f
   libui (0.2.4-x86_64-darwin) sha256=0498189f032f222b06c85a8edf5b2e4bd98867d8948094a2b5b82facacaf8c80
   libui (0.2.4-x86_64-linux) sha256=585ba238aca56ba7786faf911753382dcad988acbdbba1ba6e1a4689fb6a2d3b
+  mini_portile2 (2.8.9) sha256=0cd7c7f824e010c072e33f68bc02d85a00aeb6fce05bb4819c03dfd3c140c289
   minitest (5.27.0) sha256=2d3b17f8a36fe7801c1adcffdbc38233b938eb0b4966e97a6739055a45fa77d5
   nokogiri (1.19.4-aarch64-linux-gnu) sha256=1269fb644a6de405057a53dd5c762b1209b43ca7424f839454d3dbc677c31a8f
   nokogiri (1.19.4-aarch64-linux-musl) sha256=35c65b9ce72b3bb03207bdbe7067915019dc18c1b9b59139684bd6690fdd01af

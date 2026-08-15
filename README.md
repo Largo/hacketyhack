@@ -43,13 +43,23 @@ bundle install
 ruby hacketyhack.rb    # the IDE
 rake samples           # the bundled Shoes programs, headless
 rake boot              # IDE smoke test
+rake compare           # time a frame on both Clogs backends
 ```
 
-Six of the twelve Shoes programs in `samples/` run unmodified — `Clock`,
-`Scribble`, `Pong`, `Duel`, `Follow` and `Arcs` — exercising animation,
-`clear`/redraw, mouse input, art drawables and styled text. `rake samples`
-lists the rest rather than hiding them; they need Shoes 3 off-screen `image`
-canvases, `download`, or Hackety Hack's turtle widgets.
+Clogs has two interchangeable display backends. libui is the default; setting
+`CLOGS_BACKEND=fox` runs the same Clogs over FXRuby instead. Both boot the IDE
+and pass the same 11 of the 12 samples, but FOX blits bitmaps where libui has
+to paint them as rectangles, which makes a frame of Hackety Hack's artwork
+between 8x and 118x cheaper -- at the cost of antialiasing and alpha
+compositing. The measurements and the trade-offs are in
+[`clogs/docs/fox_vs_libui.md`](clogs/docs/fox_vs_libui.md).
+
+Eleven of the twelve Shoes programs in `samples/` run unmodified on either
+backend — `Clock`, `Scribble`, `Pong`, `Duel`, `Follow`, `Arcs`, `Fractal`,
+`Funnies`, `Animated Flowers` and both `Turtle` programs — exercising
+animation, `clear`/redraw, mouse input, art drawables, turtle widgets and
+styled text. `rake samples` names the twelfth rather than hiding it:
+`Guessing Game` is a bare `ask` loop with nobody headless to answer it.
 
 Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 `lib/compat/shoes3.rb`:

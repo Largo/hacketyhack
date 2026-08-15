@@ -8,3 +8,6 @@ tags
 /dist/
 clogs/*.gem
 tmp/fuzz
+
+# Local bundler config (e.g. `bundle config set --local with fox`)
+.bundle/

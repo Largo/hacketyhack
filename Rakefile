@@ -37,6 +37,51 @@ task :run do
   ruby "-Iclogs/lib -I. hacketyhack.rb"
 end
 
+desc "Time a frame on both Clogs backends: rake compare"
+task :compare do
+  require "open3"
+
+  # Each row is a Shoes program plus the image it should put on the page. The
+  # control has no bitmap at all, so the image rows can be read as "what the
+  # picture costs on top of everything else".
+  cases = [
+    ["no image", "tools/bench_noimage.rb", nil],
+    ["16x16 icon", "tools/bench_image.rb", "static/tab-home.png"],
+    ["500x616 art", "tools/bench_image.rb", "static/hhhello.png"],
+    ["256x256 alpha art", "tools/bench_image.rb", "static/splash-hand.png"],
+    ["40 styled paragraphs", "tools/bench_text.rb", nil]
+  ]
+
+  results = {}
+  %w[libui fox].each do |backend|
+    cases.each do |label, script, image|
+      env = { "CLOGS_BACKEND" => backend, "CLOGS_EXIT_AFTER_MS" => "5000" }
+      env["BENCH_IMAGE"] = image if image
+      err, = run_shoes(
+        [RbConfig.ruby, "-Iclogs/lib", "-I.", "-rtools/paint_bench", File.join(__dir__, script)],
+        env: env, run_ms: 5000, limit: 120
+      )
+      line = err.lines.find { |l| l.include?("frames=") }
+      results[[backend, label]] = line&.[](/p50=([\d.]+)ms/, 1)&.to_f
+      results[[backend, "#{label}/frames"]] = line&.[](/frames=(\d+)/, 1)&.to_i
+    end
+  end
+
+  puts
+  puts format("%-22s %14s %14s %10s", "page", "libui p50", "fox p50", "speedup")
+  puts "-" * 64
+  cases.each do |label, _script, _image|
+    a = results[["libui", label]]
+    b = results[["fox", label]]
+    next puts format("%-22s %14s %14s %10s", label, a || "?", b || "?", "?") unless a && b
+
+    puts format("%-22s %11.2f ms %11.2f ms %9.1fx", label, a, b, a / b)
+  end
+  puts
+  puts "p50 is the median time to paint the whole Shoes document, over a 5s run"
+  puts "with a 60fps animation driving the repaints."
+end
+
 desc "Boot the Hackety Hack IDE headlessly and check it builds its window"
 task :boot do
   err, ok = run_shoes([RbConfig.ruby, File.join(__dir__, "hacketyhack.rb")], run_ms: 2500, limit: 120)

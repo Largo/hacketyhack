@@ -1,9 +1,14 @@
 # frozen_string_literal: true
 
 require_relative "drawable"
-require_relative "canvas"
-require_relative "dialogs"
 require_relative "clipboard"
+
+# The canvas and the dialogs are backend-specific; clogs.rb has already loaded
+# whichever pair belongs to the selected backend.
+unless Clogs.fox?
+  require_relative "canvas"
+  require_relative "dialogs"
+end
 
 module Clogs
   # The display side of Shoes::App: one libui window, one canvas, and the
