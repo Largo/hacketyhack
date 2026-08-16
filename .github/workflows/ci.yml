@@ -264,3 +264,59 @@ jobs:
           bundle config set --local with gtk3
           bundle install --jobs 4
           xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+  nappgui:
+    name: Clogs on the NAppGUI backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # NAppGUI is not packaged by any distribution, so it is built from
+      # source; its GTK backend needs GTK 3's headers and libcurl. Like Qt,
+      # this backend drives its own C shim through Fiddle -- but for a
+      # different reason: NAppGUI's osmain macro wants to own main(). See
+      # clogs/docs/backends.md.
+      - name: Install NAppGUI's build dependencies and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libcurl4-openssl-dev cmake \
+                                  xvfb xauth
+
+      - name: Build NAppGUI from source
+        run: |
+          git clone --depth 1 https://github.com/frang75/nappgui_src ../nappgui_src
+          cmake -S ../nappgui_src -B ../nappgui_src/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build ../nappgui_src/build --parallel
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+
+      - name: Build the NAppGUI shim
+        env:
+          NAPPGUI_SRC: ../nappgui_src
+        run: bundle exec rake nappgui:build
+
+      - name: Run the bundled Shoes samples on NAppGUI
+        env:
+          CLOGS_BACKEND: nappgui
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on NAppGUI
+        env:
+          CLOGS_BACKEND: nappgui
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on NAppGUI
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: nappgui
+        run: |
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test

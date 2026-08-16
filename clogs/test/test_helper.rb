@@ -11,18 +11,25 @@ module ClogsTest
   # already using.
   #
   # This probes the capability rather than the display, because the backends
-  # differ on when they have it. libui and FOX can measure a string as soon as
-  # they have a display. wx cannot build a font at all until its application
-  # object is fully initialised, and that only happens inside its main loop --
-  # so on wx these tests skip, and the sample suite covers that ground instead.
+  # differ on when they have it. libui, FOX, Qt and GTK3 can measure a string
+  # as soon as they have a display. wx cannot build a font until its
+  # application object is fully initialised, and NAppGUI cannot until
+  # osmain_imp has started its SDK -- both of which happen only inside the
+  # main loop. On those two these tests skip, and the sample suite covers that
+  # ground instead.
+  #
+  # Measurement has to be judged by its answer rather than by whether it
+  # raised: the NAppGUI backend reports a zero extent before its SDK is up
+  # instead of failing, which would otherwise read as a working measurement.
   def self.ui_available?
     return @ui_available unless @ui_available.nil?
 
     @ui_available = begin
       Clogs::App.ensure_backend!
       block = Clogs::TextBlock.new([Clogs::Run.new(text: "Hg", size: 12)], -1)
+      measured = block.width.to_f.positive? && block.height.to_f.positive?
       block.free
-      true
+      measured
     rescue StandardError, NameError
       false
     end

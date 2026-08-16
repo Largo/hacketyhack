@@ -48,22 +48,23 @@ rake compare           # time a frame on every Clogs backend
 
 Clogs has five interchangeable display backends: libui (the default), FOX via
 FXRuby, wxWidgets via wxRuby3, Qt through a small C shim this repo carries
-(Ruby has no maintained Qt binding), and GTK3 via ruby-gnome. All five boot the
-IDE and pass the same 11 of the 12 samples. They differ in what a frame costs,
+(Ruby has no maintained Qt binding), GTK3 via ruby-gnome, and NAppGUI through a
+second shim. All six boot the IDE and pass the same 11 of the 12 samples. They differ in what a frame costs,
 mostly because libui cannot blit a bitmap and has to paint pictures as
 rectangles:
 
-| median frame | libui | fox | wx | qt | gtk3 |
-|---|---|---|---|---|---|
-| the splash hand, 256x256 with alpha | 18.56 ms | 0.12 ms | 0.39 ms | 0.45 ms | 0.44 ms |
-| 40 styled paragraphs | 71.92 ms | 9.64 ms | 66.86 ms | 15.50 ms | 45.99 ms |
+| median frame | libui | fox | wx | qt | gtk3 | nappgui |
+|---|---|---|---|---|---|---|
+| the splash hand, 256x256 with alpha | 18.75 ms | 0.19 ms | 0.46 ms | 0.59 ms | 0.54 ms | 0.57 ms |
+| 40 styled paragraphs | 50.87 ms | 9.11 ms | 52.05 ms | 14.24 ms | 34.90 ms | 16.80 ms |
 
 The libui and gtk3 columns are the same Cairo and the same Pango -- on Linux
-libui is a thin C wrapper over exactly them -- so that 42x is the wrapper, not
+libui is a thin C wrapper over exactly them -- so that 35x is the wrapper, not
 the stack. Qt draws the best frame overall, wx is the most portable of the
 alternatives, FOX is faster than any of them but loses antialiasing and alpha,
-and libui stays the default because it is the only one that installs without a
-compiler. `rake compare` reproduces the table, and the trade-offs are in
+NAppGUI keeps pace with Qt and gtk3 out of a 3 MB SDK but has no character in
+its key event, and libui stays the default because it is the only one that
+installs without a compiler. `rake compare` reproduces the table, and the trade-offs are in
 [`clogs/docs/backends.md`](clogs/docs/backends.md).
 
 Eleven of the twelve Shoes programs in `samples/` run unmodified on every
@@ -121,7 +122,14 @@ sudo apt-get install libgtk-3-dev                            # for gtk3
 bundle config set --local with gtk3 && bundle install
 CLOGS_BACKEND=gtk3 rake samples
 
-rake compare                                                 # all five, timed
+sudo apt-get install libcurl4-openssl-dev cmake              # for nappgui
+git clone --depth 1 https://github.com/frang75/nappgui_src ../nappgui_src
+cmake -S ../nappgui_src -B ../nappgui_src/build -DCMAKE_BUILD_TYPE=Release
+cmake --build ../nappgui_src/build --parallel
+NAPPGUI_SRC=../nappgui_src rake nappgui:build                # builds the shim
+CLOGS_BACKEND=nappgui rake samples
+
+rake compare                                                 # all six, timed
 SHOT_DIR=tmp/shots CLOGS_BACKEND=qt ruby -Iclogs/lib -I. tools/screenshots.rb
 ```
 

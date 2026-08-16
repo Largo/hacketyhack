@@ -19,10 +19,11 @@ module Clogs
   # compositing and transforms but no way to blit a bitmap, FOX blits bitmaps
   # but has neither a transform stack nor an alpha channel, wx has both at the
   # price of a much larger dependency, qt has both but has to carry its own C
-  # shim because Ruby has no maintained Qt binding at all, and gtk3 is the
-  # library libui itself draws through on Linux, reached without the wrapper.
+  # shim because Ruby has no maintained Qt binding at all, gtk3 is the library
+  # libui itself draws through on Linux reached without the wrapper, and
+  # nappgui is the smallest of the lot -- and the only one with no clipping.
   # Select one with CLOGS_BACKEND; docs/backends.md has what each trade costs.
-  BACKENDS = %w[libui fox wx qt gtk3].freeze
+  BACKENDS = %w[libui fox wx qt gtk3 nappgui].freeze
   DEFAULT_BACKEND = "libui"
 
   def self.backend
@@ -54,6 +55,10 @@ module Clogs
 
   def self.gtk3?
     backend == "gtk3"
+  end
+
+  def self.nappgui?
+    backend == "nappgui"
   end
 end
 

@@ -39,7 +39,7 @@ your Shoes program
         |
       Clogs                layout, painting, widgets, input
         |
-libui / FOX / wx / Qt / GTK3   one native window, one canvas
+libui/FOX/wx/Qt/GTK3/NAppGUI   one native window, one canvas
 ```
 
 The bottom layer is swappable. libui is the default because it is the only one
@@ -47,12 +47,14 @@ that installs without a compiler; `CLOGS_BACKEND=fox` runs the same Clogs on
 [FXRuby](https://github.com/larskanis/fxruby), `CLOGS_BACKEND=wx` on
 [wxRuby3](https://github.com/mcorino/wxRuby3), `CLOGS_BACKEND=qt` on Qt 6
 through a C shim in [`ext/qt`](ext/qt) -- Ruby has no maintained Qt binding, so
-that backend brings its own -- and `CLOGS_BACKEND=gtk3` on
-[ruby-gnome](https://github.com/ruby-gnome/ruby-gnome). All five pass the same
-11 of 12 Shoes samples. All four alternatives can blit a bitmap, which libui
-cannot, making an artwork-heavy frame 10x to 150x cheaper; wx, Qt and gtk3
-match libui's drawing exactly, while FOX trades antialiasing and alpha for more
-speed still.
+that backend brings its own -- `CLOGS_BACKEND=gtk3` on
+[ruby-gnome](https://github.com/ruby-gnome/ruby-gnome), and
+`CLOGS_BACKEND=nappgui` on [NAppGUI](https://nappgui.com) through a second C
+shim in [`ext/nappgui`](ext/nappgui), for the same reason and one more: its
+`osmain` macro wants to define `main()`. All six pass the same 11 of 12 Shoes
+samples. All five alternatives can blit a bitmap, which libui cannot, making an
+artwork-heavy frame 10x to 150x cheaper; wx, Qt, gtk3 and NAppGUI match libui's
+drawing exactly, while FOX trades antialiasing and alpha for more speed still.
 
 gtk3 is the one to read first: on Linux libui *is* GTK3 and Cairo, one C
 wrapper down, so the difference between those two columns is what the wrapper

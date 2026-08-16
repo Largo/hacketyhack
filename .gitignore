@@ -15,3 +15,8 @@ tmp/fuzz
 # The Qt backend's shim is built, not committed (clogs/ext/qt/build.sh)
 clogs/ext/qt/*.so
 clogs/ext/qt/*.dylib
+
+# The NAppGUI backend's shim is built, not committed
+# (clogs/ext/nappgui/build.sh)
+clogs/ext/nappgui/*.so
+clogs/ext/nappgui/*.dylib
