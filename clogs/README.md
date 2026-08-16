@@ -35,20 +35,22 @@ tree; Clogs is a Lacci *display service* and owns the pixels.
 ```
 your Shoes program
         |
-      Lacci             the Shoes DSL, drawable tree, events
+      Lacci                the Shoes DSL, drawable tree, events
         |
-      Clogs             layout, painting, widgets, input
+      Clogs                layout, painting, widgets, input
         |
- libui / FOX / wx       one native window, one canvas
+ libui / FOX / wx / Qt     one native window, one canvas
 ```
 
 The bottom layer is swappable. libui is the default because it is the only one
 that installs without a compiler; `CLOGS_BACKEND=fox` runs the same Clogs on
-[FXRuby](https://github.com/larskanis/fxruby) and `CLOGS_BACKEND=wx` on
-[wxRuby3](https://github.com/mcorino/wxRuby3). All three pass the same 11 of 12
-Shoes samples. Both alternatives can blit a bitmap, which libui cannot, making
-an artwork-heavy frame 10x to 100x cheaper; wx matches libui's drawing exactly,
-while FOX trades antialiasing and alpha for more speed still. The
+[FXRuby](https://github.com/larskanis/fxruby), `CLOGS_BACKEND=wx` on
+[wxRuby3](https://github.com/mcorino/wxRuby3), and `CLOGS_BACKEND=qt` on Qt 6
+through a C shim in [`ext/qt`](ext/qt) -- Ruby has no maintained Qt binding, so
+that backend brings its own. All four pass the same 11 of 12 Shoes samples.
+All three alternatives can blit a bitmap, which libui cannot, making an
+artwork-heavy frame 10x to 150x cheaper; wx and Qt match libui's drawing
+exactly, while FOX trades antialiasing and alpha for more speed still. The
 measurements, the trade-offs and `rake compare` are in
 [docs/backends.md](docs/backends.md).
 

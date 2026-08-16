@@ -14,13 +14,14 @@ require_relative "clogs/version"
 module Clogs
   # Which display library draws the pixels.
   #
-  # `libui` is the default and the one Clogs was written against. The other two
-  # exist because the three libraries fail in different directions: libui has
-  # Cairo's compositing and transforms but no way to blit a bitmap, FOX blits
-  # bitmaps but has neither a transform stack nor an alpha channel, and wx has
-  # both at the price of a much larger dependency. Select one with
+  # `libui` is the default and the one Clogs was written against. The others
+  # exist because the libraries fail in different directions: libui has Cairo's
+  # compositing and transforms but no way to blit a bitmap, FOX blits bitmaps
+  # but has neither a transform stack nor an alpha channel, wx has both at the
+  # price of a much larger dependency, and qt has both but has to carry its own
+  # C shim because Ruby has no maintained Qt binding at all. Select one with
   # CLOGS_BACKEND, and see docs/backends.md for what each trade costs.
-  BACKENDS = %w[libui fox wx].freeze
+  BACKENDS = %w[libui fox wx qt].freeze
   DEFAULT_BACKEND = "libui"
 
   def self.backend
@@ -44,6 +45,10 @@ module Clogs
 
   def self.wx?
     backend == "wx"
+  end
+
+  def self.qt?
+    backend == "qt"
   end
 end
 

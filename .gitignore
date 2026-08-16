@@ -11,3 +11,7 @@ tmp/fuzz
 
 # Local bundler config (e.g. `bundle config set --local with fox`)
 .bundle/
+
+# The Qt backend's shim is built, not committed (clogs/ext/qt/build.sh)
+clogs/ext/qt/*.so
+clogs/ext/qt/*.dylib

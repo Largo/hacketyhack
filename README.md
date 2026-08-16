@@ -46,21 +46,22 @@ rake boot              # IDE smoke test
 rake compare           # time a frame on every Clogs backend
 ```
 
-Clogs has three interchangeable display backends: libui (the default), FOX via
-FXRuby, and wxWidgets via wxRuby3. All three boot the IDE and pass the same 11
-of the 12 samples. They differ in what a frame costs, because libui cannot blit
-a bitmap and has to paint pictures as rectangles:
+Clogs has four interchangeable display backends: libui (the default), FOX via
+FXRuby, wxWidgets via wxRuby3, and Qt through a small C shim this repo carries,
+because Ruby has no maintained Qt binding. All four boot the IDE and pass the
+same 11 of the 12 samples. They differ in what a frame costs, mostly because
+libui cannot blit a bitmap and has to paint pictures as rectangles:
 
-| median frame | libui | fox | wx |
-|---|---|---|---|
-| the splash hand, 256x256 with alpha | 17.96 ms | 0.17 ms | 0.40 ms |
-| 40 styled paragraphs | 67.72 ms | 9.60 ms | 67.72 ms |
+| median frame | libui | fox | wx | qt |
+|---|---|---|---|---|
+| the splash hand, 256x256 with alpha | 19.50 ms | 0.13 ms | 0.41 ms | 0.51 ms |
+| 40 styled paragraphs | 72.02 ms | 9.07 ms | 69.52 ms | 15.46 ms |
 
-wx draws identically to libui -- it is the same Cairo -- and is the best
-backend for Hackety Hack; FOX is faster still but loses antialiasing and alpha;
-libui is the easiest to install by a wide margin, which is why it stays the
-default. `rake compare` reproduces the table, and the trade-offs are in
-[`clogs/docs/backends.md`](clogs/docs/backends.md).
+Qt draws the best frame and wx is the one worth adopting, since it comes with a
+binding somebody else maintains; FOX is faster than both but loses antialiasing
+and alpha; libui is the only one that installs without a compiler, which is why
+it stays the default. `rake compare` reproduces the table, and the trade-offs
+are in [`clogs/docs/backends.md`](clogs/docs/backends.md).
 
 Eleven of the twelve Shoes programs in `samples/` run unmodified on every
 backend — `Clock`, `Scribble`, `Pong`, `Duel`, `Follow`, `Arcs`, `Fractal`,
@@ -108,6 +109,13 @@ sudo apt-get install libwxgtk3.2-dev libwxgtk-webview3.2-dev \
                      libwxgtk-media3.2-dev swig doxygen      # for wx
 bundle config set --local with "fox wx" && bundle install
 CLOGS_BACKEND=wx rake samples
+
+sudo apt-get install qt6-base-dev                            # for qt
+rake qt:build                                                # builds the shim
+CLOGS_BACKEND=qt rake samples
+
+rake compare                                                 # all four, timed
+SHOT_DIR=tmp/shots CLOGS_BACKEND=qt ruby -Iclogs/lib -I. tools/screenshots.rb
 ```
 
 On a headless machine, prefix GUI commands with `xvfb-run -a`.

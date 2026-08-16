@@ -176,3 +176,48 @@ jobs:
         env:
           CLOGS_BACKEND: wx
         run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+  qt:
+    name: Clogs on the Qt backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # Ruby has no maintained Qt binding, so this backend builds its own C
+      # shim over Qt 6 and drives it through Fiddle. See
+      # clogs/docs/backends.md.
+      - name: Install Qt 6 and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+
+      - name: Build the Qt shim
+        run: bundle exec rake qt:build
+
+      - name: Run the bundled Shoes samples on Qt
+        env:
+          CLOGS_BACKEND: qt
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on Qt
+        env:
+          CLOGS_BACKEND: qt
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on Qt
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: qt
+        run: |
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test

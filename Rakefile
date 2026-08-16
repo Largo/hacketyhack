@@ -37,6 +37,13 @@ task :run do
   ruby "-Iclogs/lib -I. hacketyhack.rb"
 end
 
+namespace :qt do
+  desc "Build the Qt shim the qt backend drives (needs Qt 6's headers)"
+  task :build do
+    sh File.join(__dir__, "clogs", "ext", "qt", "build.sh")
+  end
+end
+
 desc "Time a frame on every Clogs backend: rake compare"
 task :compare do
   require "open3"
@@ -52,7 +59,7 @@ task :compare do
     ["40 styled paragraphs", "tools/bench_text.rb", nil]
   ]
 
-  backends = (ENV["BACKENDS"] || "libui fox wx").split
+  backends = (ENV["BACKENDS"] || "libui fox wx qt").split
   results = {}
   backends.each do |backend|
     cases.each do |label, script, image|
