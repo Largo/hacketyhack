@@ -221,3 +221,46 @@ jobs:
         run: |
           bundle install --jobs 4
           xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+  gtk3:
+    name: Clogs on the GTK3 backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # ruby-gnome builds against GTK 3's development files. The runtime GTK is
+      # already needed by the default backend, so this only adds the headers.
+      - name: Install GTK 3 and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config set --local with gtk3
+          bundle install --jobs 4
+
+      - name: Run the bundled Shoes samples on GTK3
+        env:
+          CLOGS_BACKEND: gtk3
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on GTK3
+        env:
+          CLOGS_BACKEND: gtk3
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on GTK3
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: gtk3
+        run: |
+          bundle config set --local with gtk3
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test

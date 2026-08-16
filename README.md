@@ -46,22 +46,25 @@ rake boot              # IDE smoke test
 rake compare           # time a frame on every Clogs backend
 ```
 
-Clogs has four interchangeable display backends: libui (the default), FOX via
-FXRuby, wxWidgets via wxRuby3, and Qt through a small C shim this repo carries,
-because Ruby has no maintained Qt binding. All four boot the IDE and pass the
-same 11 of the 12 samples. They differ in what a frame costs, mostly because
-libui cannot blit a bitmap and has to paint pictures as rectangles:
+Clogs has five interchangeable display backends: libui (the default), FOX via
+FXRuby, wxWidgets via wxRuby3, Qt through a small C shim this repo carries
+(Ruby has no maintained Qt binding), and GTK3 via ruby-gnome. All five boot the
+IDE and pass the same 11 of the 12 samples. They differ in what a frame costs,
+mostly because libui cannot blit a bitmap and has to paint pictures as
+rectangles:
 
-| median frame | libui | fox | wx | qt |
-|---|---|---|---|---|
-| the splash hand, 256x256 with alpha | 19.50 ms | 0.13 ms | 0.41 ms | 0.51 ms |
-| 40 styled paragraphs | 72.02 ms | 9.07 ms | 69.52 ms | 15.46 ms |
+| median frame | libui | fox | wx | qt | gtk3 |
+|---|---|---|---|---|---|
+| the splash hand, 256x256 with alpha | 18.56 ms | 0.12 ms | 0.39 ms | 0.45 ms | 0.44 ms |
+| 40 styled paragraphs | 71.92 ms | 9.64 ms | 66.86 ms | 15.50 ms | 45.99 ms |
 
-Qt draws the best frame and wx is the one worth adopting, since it comes with a
-binding somebody else maintains; FOX is faster than both but loses antialiasing
-and alpha; libui is the only one that installs without a compiler, which is why
-it stays the default. `rake compare` reproduces the table, and the trade-offs
-are in [`clogs/docs/backends.md`](clogs/docs/backends.md).
+The libui and gtk3 columns are the same Cairo and the same Pango -- on Linux
+libui is a thin C wrapper over exactly them -- so that 42x is the wrapper, not
+the stack. Qt draws the best frame overall, wx is the most portable of the
+alternatives, FOX is faster than any of them but loses antialiasing and alpha,
+and libui stays the default because it is the only one that installs without a
+compiler. `rake compare` reproduces the table, and the trade-offs are in
+[`clogs/docs/backends.md`](clogs/docs/backends.md).
 
 Eleven of the twelve Shoes programs in `samples/` run unmodified on every
 backend — `Clock`, `Scribble`, `Pong`, `Duel`, `Follow`, `Arcs`, `Fractal`,
@@ -114,7 +117,11 @@ sudo apt-get install qt6-base-dev                            # for qt
 rake qt:build                                                # builds the shim
 CLOGS_BACKEND=qt rake samples
 
-rake compare                                                 # all four, timed
+sudo apt-get install libgtk-3-dev                            # for gtk3
+bundle config set --local with gtk3 && bundle install
+CLOGS_BACKEND=gtk3 rake samples
+
+rake compare                                                 # all five, timed
 SHOT_DIR=tmp/shots CLOGS_BACKEND=qt ruby -Iclogs/lib -I. tools/screenshots.rb
 ```
 

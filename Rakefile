@@ -59,7 +59,7 @@ task :compare do
     ["40 styled paragraphs", "tools/bench_text.rb", nil]
   ]
 
-  backends = (ENV["BACKENDS"] || "libui fox wx qt").split
+  backends = (ENV["BACKENDS"] || "libui fox wx qt gtk3").split
   results = {}
   backends.each do |backend|
     cases.each do |label, script, image|

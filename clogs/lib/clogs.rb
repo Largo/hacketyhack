@@ -18,10 +18,11 @@ module Clogs
   # exist because the libraries fail in different directions: libui has Cairo's
   # compositing and transforms but no way to blit a bitmap, FOX blits bitmaps
   # but has neither a transform stack nor an alpha channel, wx has both at the
-  # price of a much larger dependency, and qt has both but has to carry its own
-  # C shim because Ruby has no maintained Qt binding at all. Select one with
-  # CLOGS_BACKEND, and see docs/backends.md for what each trade costs.
-  BACKENDS = %w[libui fox wx qt].freeze
+  # price of a much larger dependency, qt has both but has to carry its own C
+  # shim because Ruby has no maintained Qt binding at all, and gtk3 is the
+  # library libui itself draws through on Linux, reached without the wrapper.
+  # Select one with CLOGS_BACKEND; docs/backends.md has what each trade costs.
+  BACKENDS = %w[libui fox wx qt gtk3].freeze
   DEFAULT_BACKEND = "libui"
 
   def self.backend
@@ -49,6 +50,10 @@ module Clogs
 
   def self.qt?
     backend == "qt"
+  end
+
+  def self.gtk3?
+    backend == "gtk3"
   end
 end
 

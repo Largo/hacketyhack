@@ -3,23 +3,25 @@
 Clogs paints the whole Shoes document itself and uses its display library for
 three things only: a window, a drawing surface and an event source. That
 boundary is narrow enough to write more than once, so it has been — against
-libui, against FOX, against wxWidgets and against Qt — and all four run the
-same programs, so they can be compared by measurement rather than by argument.
+libui, FOX, wxWidgets, Qt and GTK3 — and all five run the same programs, so
+they can be compared by measurement rather than by argument.
 
 ```
 CLOGS_BACKEND=libui ruby hacketyhack.rb    # the default
 CLOGS_BACKEND=fox   ruby hacketyhack.rb
 CLOGS_BACKEND=wx    ruby hacketyhack.rb
 CLOGS_BACKEND=qt    ruby hacketyhack.rb    # needs clogs/ext/qt/build.sh first
+CLOGS_BACKEND=gtk3  ruby hacketyhack.rb
 rake compare                               # the benchmark table below
 ```
 
-**Short answer: Qt draws the best frame, and libui is still the right default
-for Clogs as a gem.** Qt matches libui's rendering exactly, puts Hackety Hack's
-artwork on screen thirty to forty times more cheaply, and is four times faster
-than either libui or wx at text. Its catch is not fidelity or speed but
-supply: Ruby has no maintained Qt binding at all, so this backend carries its
-own C shim.
+**Short answer: libui's weaknesses are libui's, not its stack's — and the
+cheapest way to fix them is gtk3.** On Linux libui *is* GTK3 and Cairo, one C
+wrapper down. Reaching the same libraries directly makes the same picture
+forty times cheaper to draw and stops it being downsampled, without changing a
+pixel of what Shoes programs look like. Qt draws the best frame overall and wx
+is the most portable of the alternatives; libui stays the default because it
+is the only one that installs without a compiler.
 
 ## The measurement
 
@@ -27,13 +29,20 @@ own C shim.
 animation driving the repaints, and reports the median time to paint one whole
 frame.
 
-| page | libui | fox | wx | qt |
-|---|---|---|---|---|
-| no image (control) | 0.69 ms | **0.21 ms** | 1.22 ms | 0.49 ms |
-| 16×16 icon | 1.46 ms | **0.15 ms** | 0.22 ms | 0.35 ms |
-| 500×616 art (`hhhello.png`) | 9.00 ms | **0.12 ms** | 0.89 ms | 0.70 ms |
-| 256×256 art with alpha (`splash-hand.png`) | 19.50 ms | **0.13 ms** | 0.41 ms | 0.51 ms |
-| 40 styled paragraphs | 72.02 ms | **9.07 ms** | 69.52 ms | 15.46 ms |
+| page | libui | fox | wx | qt | gtk3 |
+|---|---|---|---|---|---|
+| no image (control) | 0.78 ms | **0.28 ms** | 1.28 ms | 0.53 ms | 0.50 ms |
+| 16×16 icon | 1.30 ms | **0.15 ms** | 0.22 ms | 0.41 ms | 0.31 ms |
+| 500×616 art (`hhhello.png`) | 8.42 ms | **0.13 ms** | 0.87 ms | 0.64 ms | 1.01 ms |
+| 256×256 art with alpha (`splash-hand.png`) | 18.56 ms | **0.12 ms** | 0.39 ms | 0.45 ms | 0.44 ms |
+| 40 styled paragraphs | 71.92 ms | **9.64 ms** | 66.86 ms | 15.50 ms | 45.99 ms |
+
+**The libui and gtk3 columns are the interesting pair.** They are the same
+Cairo and the same Pango: on Linux libui is a C wrapper over exactly this. Yet
+gtk3 paints the alpha art forty-two times faster and the text page in two
+thirds the time, and draws the large art at full resolution where libui
+downsamples it. Every one of libui's weaknesses in this document is the
+wrapper's, not the stack's.
 
 Read the image rows against the control: the difference is what putting a
 picture on the page costs.
@@ -47,12 +56,12 @@ spent building the paths. The other two blit, and their cost barely moves with
 the size of the picture.
 
 **FOX is fastest because it does the least.** Its blit is `XPutImage` with no
-compositing, which is why it is five times quicker than wx at getting a bitmap
-onto the screen and also why it cannot honour that bitmap's alpha. The speed
-and the fidelity loss are the same fact.
+compositing, which is why it is several times quicker than the rest at getting
+a bitmap onto the screen and also why it cannot honour that bitmap's alpha. The
+speed and the fidelity loss are the same fact.
 
 **wx and libui draw text at exactly the same speed**, because it is the same
-Pango, and both are four times slower than Qt at it. That 70 ms is a property
+Pango, and both are four times slower than Qt and half as fast as gtk3 at it. That 70 ms is a property
 of neither library: Clogs rebuilds a text layout object per styled run per
 frame, and caching those is the single biggest improvement available to either.
 FOX and Qt are quicker because neither builds a layout object at all — they ask
@@ -68,29 +77,29 @@ legible on the other three backends and smeared on libui.
 
 ## What each one gives up
 
-| Shoes needs | libui | FOX | wx | qt |
-|---|---|---|---|---|
-| Blit a bitmap | **no** — rectangles | yes | yes | yes |
-| Draws large art at full resolution | **no** — samples every 2nd pixel | yes | yes | yes |
-| Composite image alpha | yes | **no** — 1-bit shape mask | yes | yes |
-| Antialiasing | yes | **no** | yes | yes |
-| Transform stack (`rotate`, `scale`, `skew`) | yes | **no** — in Ruby, geometry only | yes | yes |
-| Rotate text and images | yes | **no** | yes | yes |
-| Gradients | yes | **no** — banded by hand | yes | yes |
-| Arbitrary path clipping | yes | region only | yes | yes |
-| Strikethrough, for `del()` | **no** | yes | yes | yes |
-| Image formats | **PNG only** (chunky_png) | 10 formats | 10 formats | 10+ formats |
-| Caret geometry, per-character positions | **no** | measures substrings | `get_partial_text_extents` | `QTextLayout` |
-| Second top-level window | **no** | yes | yes | yes |
-| Inner slot scrolling | **no** | `FXScrollArea` | `wxScrolledWindow` | `QScrollArea` |
-| Native clipboard | **no** — shells out | yes | yes | yes |
-| Native `ask` dialog | **no** — hand-built | yes | yes | yes |
-| A real text editor widget | **no** | `FXText`, Scintilla | `wxTextCtrl`, Scintilla | `QPlainTextEdit` |
-| Places a native control at (x, y) | **no** | yes | yes | yes |
-| A Ruby binding that exists | yes | yes | yes | **no** — see below |
+| Shoes needs | libui | FOX | wx | qt | gtk3 |
+|---|---|---|---|---|---|
+| Blit a bitmap | **no** — rectangles | yes | yes | yes | yes |
+| Draws large art at full resolution | **no** — samples every 2nd pixel | yes | yes | yes | yes |
+| Composite image alpha | yes | **no** — 1-bit shape mask | yes | yes | yes |
+| Antialiasing | yes | **no** | yes | yes | yes |
+| Transform stack (`rotate`, `scale`, `skew`) | yes | **no** — in Ruby, geometry only | yes | yes | yes |
+| Rotate text and images | yes | **no** | yes | yes | yes |
+| Gradients | yes | **no** — banded by hand | yes | yes | yes |
+| Arbitrary path clipping | yes | region only | yes | yes | yes |
+| Strikethrough, for `del()` | **no** | yes | yes | yes | yes |
+| Image formats | **PNG only** (chunky_png) | 10 formats | 10 formats | 10+ formats | everything GdkPixbuf reads |
+| Caret geometry, per-character positions | **no** | measures substrings | `get_partial_text_extents` | `QTextLayout` | `Pango#xy_to_index` |
+| Second top-level window | **no** | yes | yes | yes | yes |
+| Inner slot scrolling | **no** | `FXScrollArea` | `wxScrolledWindow` | `QScrollArea` | `Gtk::ScrolledWindow` |
+| Native clipboard | **no** — shells out | yes | yes | yes | yes |
+| Native `ask` dialog | **no** — hand-built | yes | yes | yes | hand-built (GTK has none) |
+| A real text editor widget | **no** | `FXText`, Scintilla | `wxTextCtrl`, Scintilla | `QPlainTextEdit` | `Gtk::TextView` |
+| Places a native control at (x, y) | **no** | yes | yes | yes | `Gtk::Fixed` |
+| A Ruby binding that exists | yes | yes | yes | **no** — see below | yes |
 
 `tools/bench_fidelity.rb` draws every disputed case on one page. Run it under
-each backend and compare: libui, wx and qt are indistinguishable from one
+each backend and compare: libui, wx, qt and gtk3 are indistinguishable from one
 another apart from libui's missing strikethrough, and FOX differs in exactly
 the ways the table predicts — stepped edges on the star and the ovals, and two
 overlapping translucent discs that do not blend.
@@ -100,17 +109,17 @@ own `opentab` and photographing every pane on whichever backend is selected.
 
 ## What it took to make each one work
 
-All four now do the same thing:
+All five now do the same thing:
 
 ```
-                              libui     fox      wx      qt
-rake samples                  11/12    11/12   11/12   11/12
-rake boot                        ok       ok      ok      ok
-cd clogs && rake test         15/15    15/15   12/15   15/15
+                              libui     fox      wx      qt    gtk3
+rake samples                  11/12    11/12   11/12   11/12   11/12
+rake boot                        ok       ok      ok      ok      ok
+cd clogs && rake test         15/15    15/15   12/15   15/15   15/15
                                                 + 3 skipped
 ```
 
-The failing sample is `Guessing Game.rb` on all four, for the reason the
+The failing sample is `Guessing Game.rb` on all five, for the reason the
 Rakefile already documents: it calls `ask` in an unattended loop and headless
 CI has nobody to answer it.
 
@@ -193,6 +202,22 @@ edges.
   server, and then warns again if the directory it is pointed at is not mode
   0700.
 
+### gtk3
+
+The least work of the five, which is the point: this is the library Clogs was
+already drawing through, so nothing had to be approximated and Cairo's angles,
+fill rules and transforms are the ones Clogs' shapes are written against.
+
+- **`Gtk.init` does not exist, `Gtk.init_check` segfaults.** ruby-gnome
+  initialises GTK as the binding loads; `require "gtk3"` is the whole of it,
+  and calling the leftover check afterwards takes the process down.
+- **`Gtk.main` and `Gtk.main_quit` are gone** from ruby-gnome 4. The loop they
+  wrapped is GLib's, so the backend runs `GLib::MainLoop` directly.
+- **Removing a GLib source twice is a GLib-CRITICAL on stderr**, not a Ruby
+  exception, so it cannot be rescued -- only avoided. A timeout that returns
+  false has already removed itself, and Fractal quits from inside its own
+  animation, so the backend tracks which of its timers are still live.
+
 Two shared bugs also fell out of writing the display half three times:
 
 - **Paragraph reported a wrapped paragraph wider than the width it was asked to
@@ -251,15 +276,39 @@ recommendation despite drawing the best frame. It is also, oddly, the most
 *self-contained* of the three alternatives: one .cpp file and a two-line build,
 against wxRuby3's SWIG-generated extension and its patch.
 
-So all three alternatives live behind opt-in, and libui stays the default.
+**GTK3** is the mildest of the four alternatives: ruby-gnome's binding is a C
+extension over the GTK 3 development files, which on Linux are already
+installed, because libui needs GTK at runtime anyway.
+
+```
+sudo apt-get install libgtk-3-dev
+bundle config set --local with gtk3 && bundle install
+CLOGS_BACKEND=gtk3 ruby hacketyhack.rb
+```
+
+What it costs is portability of a different kind: libui, FXRuby, wxRuby and Qt
+all ship or build on macOS and Windows, and a GTK3 application on macOS looks
+like a GTK3 application. For Linux it is the cheapest fix available for
+libui's bitmap problem; as the single backend for a cross-platform Shoes it is
+the wrong shape.
+
+So all four alternatives live behind opt-in, and libui stays the default.
 
 ## Verdict
 
+**The headline is what gtk3 proves.** It and libui are the same Cairo and the
+same Pango -- on Linux libui is a thin C wrapper over exactly this -- and gtk3
+paints Hackety Hack's splash forty-two times faster, draws the Cheat Sheet at
+full resolution instead of every second pixel, and renders `del()` with a line
+through it. None of that is a difference between libraries. All of it is the
+wrapper. Anyone reading `libui_shoes_coverage.md` as a list of things Shoes
+cannot have on this stack should read it instead as a list of things libui does
+not expose.
+
 **Qt draws the best frame.** It matches libui's rendering exactly, is thirty to
 forty times cheaper on artwork, four times faster than libui or wx on text, and
-the only backend besides libui that passes Clogs' whole suite without skips. If
-the question is purely "which of these draws Hackety Hack best", the answer is
-Qt.
+one of the three backends that passes Clogs' whole suite without skips. If the
+question is purely "which of these draws Hackety Hack best", the answer is Qt.
 
 **wx is the one to actually adopt for Hackety Hack.** It draws the same frame
 as Qt to within a hair, and it comes with a binding somebody else maintains.
@@ -280,10 +329,16 @@ antialiasing and alpha. For a Shoes program made of flat art and text that is
 an excellent trade; for one made of photographs and translucency it is the
 wrong one.
 
+**For Linux specifically, gtk3 is the cheapest win available.** It needs no new
+runtime dependency -- libui already pulls GTK in -- and it removes every
+drawing weakness in this document at once. If Clogs only had to run on Linux,
+this would be the recommendation outright.
+
 Worth doing next, in order:
 
-1. **Cache text layouts.** 68 ms a frame for forty paragraphs is a missing
-   cache in Clogs, not a limitation of libui or wx, and fixing it helps both.
+1. **Cache text layouts.** 70 ms a frame for forty paragraphs is a missing
+   cache in Clogs, not a limitation of libui, wx or gtk3, and fixing it helps
+   all three.
 2. **Use native controls for `edit_line` and `edit_box` on wx**, positioned by
    the Shoes layout engine. That is what the editor tab needs, and wx is the
    backend that can provide it.
