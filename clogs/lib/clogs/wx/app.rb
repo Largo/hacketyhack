@@ -124,8 +124,21 @@ module Clogs
           App.loop_active = true
           owner.build_window
           owner.start
+          # wxWidgets reads this block's value as OnInit's: anything falsy and
+          # it tears the application down instead of entering the main loop.
+          # `start` ends in install_test_hooks, which returns a timer under
+          # CLOGS_EXIT_AFTER_MS and nil otherwise -- so without this the app
+          # runs under the test harness and exits instantly everywhere else.
+          true
         end
         App.loop_active = false
+        # Lacci tears the drawable tree down *after* the event loop returns,
+        # and every drawable that unparents itself on the way out asks for a
+        # repaint. By then wx has destroyed its windows, and asking a deleted
+        # wxPanel to refresh raises rather than doing nothing -- which is how a
+        # nested Shoes.app, whose own destroy never ran, takes the shutdown
+        # down with it. Nothing here has a window any more, so say so.
+        App.instances.dup.each(&:display_gone!)
         Fonts.clear
         UI.clear_cache
         Painter.clear_cache
@@ -164,6 +177,7 @@ module Clogs
 
     def start
       @window.show
+      Wx.get_app.set_top_window(@window)
       @canvas.area.set_focus
       @running = true
       arm_timers
@@ -192,6 +206,14 @@ module Clogs
       return if @destroyed
 
       @canvas&.redraw
+    end
+
+    # The window and canvas are gone and this app can never paint again, but
+    # its drawables may still be dismantling themselves.
+    def display_gone!
+      @destroyed = true
+      @canvas = nil
+      @window = nil
     end
 
     # wx timers can only exist once the application does, so timers armed while
