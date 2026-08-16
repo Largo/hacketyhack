@@ -127,3 +127,52 @@ jobs:
           bundle config set --local with fox
           bundle install --jobs 4
           xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+  wx:
+    name: Clogs on the wx backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # wxRuby3 is SWIG-generated C++ and compiles against wxWidgets 3.2's
+      # headers. The webview and media packages are separate on Debian and
+      # Ubuntu, and the gem does not name them, but the link step needs both.
+      - name: Install wxWidgets and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwxgtk3.2-dev libwxgtk-webview3.2-dev \
+                                  libwxgtk-media3.2-dev swig doxygen \
+                                  libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config set --local with wx
+          bundle install --jobs 4
+
+      # wxRuby3 1.8.1 does not link against a distribution's own wxWidgets:
+      # `wx-config --ld` answers "g++ -o", and the gem appends its own
+      # "-o target" at the end of the link line, so that leading -o swallows
+      # the soname flag and no shared object is produced. See
+      # clogs/docs/backends.md.
+      - name: Patch wxRuby3's link flags, then build it
+        run: |
+          gem_dir=$(bundle show wxruby3)
+          sed -i 's|@ld          = wx_config("--ld")|@ld          = wx_config("--ld").sub(/\\s+-o\\s*\\z/, "")|' \
+            "$gem_dir/rakelib/lib/config/unixish.rb"
+          (cd "$gem_dir" && rake -m wxruby:gem:setup)
+
+      - name: Run the bundled Shoes samples on wx
+        env:
+          CLOGS_BACKEND: wx
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on wx
+        env:
+          CLOGS_BACKEND: wx
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot

@@ -14,17 +14,18 @@ require_relative "clogs/version"
 module Clogs
   # Which display library draws the pixels.
   #
-  # `libui` is the default and the one Clogs was written against. `fox` is an
-  # alternative backend over FXRuby, kept because the two libraries fail in
-  # opposite directions: libui has Cairo's compositing and transforms but no
-  # way to blit a bitmap, FOX blits bitmaps but has neither a transform stack
-  # nor an alpha channel. Select it with CLOGS_BACKEND=fox, and see
-  # docs/fox_vs_libui.md for what that trade actually costs.
-  BACKENDS = %w[libui fox].freeze
+  # `libui` is the default and the one Clogs was written against. The other two
+  # exist because the three libraries fail in different directions: libui has
+  # Cairo's compositing and transforms but no way to blit a bitmap, FOX blits
+  # bitmaps but has neither a transform stack nor an alpha channel, and wx has
+  # both at the price of a much larger dependency. Select one with
+  # CLOGS_BACKEND, and see docs/backends.md for what each trade costs.
+  BACKENDS = %w[libui fox wx].freeze
+  DEFAULT_BACKEND = "libui"
 
   def self.backend
     @backend ||= begin
-      name = (ENV["CLOGS_BACKEND"] || "libui").downcase
+      name = (ENV["CLOGS_BACKEND"] || DEFAULT_BACKEND).downcase
       unless BACKENDS.include?(name)
         raise ArgumentError, "Unknown CLOGS_BACKEND #{name.inspect}, expected one of #{BACKENDS.join(", ")}"
       end
@@ -33,24 +34,35 @@ module Clogs
     end
   end
 
+  def self.libui?
+    backend == "libui"
+  end
+
   def self.fox?
     backend == "fox"
+  end
+
+  def self.wx?
+    backend == "wx"
   end
 end
 
 # A backend supplies the drawing surface, the event source, text measurement
 # and the dialogs. Everything else -- layout, the drawable tree, the widgets
 # Clogs paints for itself -- is shared between them.
-if Clogs.fox?
-  require_relative "clogs/fox/ui"
-  require_relative "clogs/fox/painter"
-  require_relative "clogs/fox/text"
-else
+#
+# libui's files predate the split and sit at the top of the tree; the others
+# live in a directory named for themselves.
+if Clogs.libui?
   require_relative "clogs/ui"
   require_relative "clogs/painter"
   require_relative "clogs/text"
   require_relative "clogs/canvas"
   require_relative "clogs/dialogs"
+else
+  require_relative "clogs/#{Clogs.backend}/ui"
+  require_relative "clogs/#{Clogs.backend}/painter"
+  require_relative "clogs/#{Clogs.backend}/text"
 end
 require_relative "clogs/style"
 require_relative "clogs/paragraph"
@@ -111,10 +123,10 @@ require_relative "clogs/drawables/misc"
 require_relative "clogs/app"
 
 # App and Image are the two classes that are part backend: the rest of each is
-# shared, so the FOX versions reopen them rather than replacing the files.
-if Clogs.fox?
-  require_relative "clogs/fox/app"
-  require_relative "clogs/fox/image"
+# shared, so a backend reopens them rather than replacing the files.
+unless Clogs.libui?
+  require_relative "clogs/#{Clogs.backend}/app"
+  require_relative "clogs/#{Clogs.backend}/image"
 end
 
 require_relative "clogs/display_service"

@@ -15,7 +15,17 @@ end
 #
 #   bundle config set --local with fox && bundle install
 #
-# See docs/fox_vs_libui.md.
+# See docs/backends.md.
 group :fox, optional: true do
   gem "fxruby", "~> 1.6"
+end
+
+# The alternative wx backend (CLOGS_BACKEND=wx). wxRuby3 is a SWIG-generated
+# C++ extension needing wxWidgets 3.2's headers, SWIG and doxygen, plus a
+# `wxruby setup` step that compiles for several minutes:
+#
+#   bundle config set --local with wx && bundle install && wxruby setup
+#
+group :wx, optional: true do
+  gem "wxruby3", "~> 1.8"
 end

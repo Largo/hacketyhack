@@ -6,17 +6,24 @@ require "minitest/autorun"
 require "clogs"
 
 module ClogsTest
-  # Anything that measures text needs the display library initialised, which in
-  # turn needs a display. On CI that is Xvfb; locally it is whatever you are
-  # already using. Both backends boot through Clogs::App, which knows which one
-  # is selected.
+  # Anything that measures text needs the display library initialised, which
+  # in turn needs a display. On CI that is Xvfb; locally it is whatever you are
+  # already using.
+  #
+  # This probes the capability rather than the display, because the backends
+  # differ on when they have it. libui and FOX can measure a string as soon as
+  # they have a display. wx cannot build a font at all until its application
+  # object is fully initialised, and that only happens inside its main loop --
+  # so on wx these tests skip, and the sample suite covers that ground instead.
   def self.ui_available?
     return @ui_available unless @ui_available.nil?
 
     @ui_available = begin
-      Clogs::App.ensure_libui!
+      Clogs::App.ensure_backend!
+      block = Clogs::TextBlock.new([Clogs::Run.new(text: "Hg", size: 12)], -1)
+      block.free
       true
-    rescue StandardError
+    rescue StandardError, NameError
       false
     end
   end

@@ -27,8 +27,30 @@ GEM
       fiddle
     mini_portile2 (2.8.9)
     minitest (5.27.0)
+    nokogiri (1.19.4)
+      mini_portile2 (~> 2.8.2)
+      racc (~> 1.4)
+    nokogiri (1.19.4-aarch64-linux-gnu)
+      racc (~> 1.4)
+    nokogiri (1.19.4-arm64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.19.4-x86_64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.19.4-x86_64-linux-gnu)
+      racc (~> 1.4)
+    openssl (4.0.2)
+    plat4m (1.1.8)
+    power_assert (3.1.0)
+    racc (1.8.1)
     rake (13.4.2)
     scarpe-components (0.4.0)
+    wxruby3 (1.8.1)
+      minitest (>= 5.15)
+      nokogiri (~> 1.12)
+      openssl (~> 4.0)
+      plat4m (~> 1.1)
+      power_assert (~> 3.0)
+      rake
 
 PLATFORMS
   aarch64-linux
@@ -42,6 +64,7 @@ DEPENDENCIES
   fxruby (~> 1.6)
   minitest (~> 5.0)
   rake (~> 13.0)
+  wxruby3 (~> 1.8)
 
 CHECKSUMS
   bundler (4.0.17) sha256=214e21431b5665dd2f99df8a5511c6b151d7a72e8015c8b38f8b775b61cbb6c1
@@ -57,8 +80,18 @@ CHECKSUMS
   libui (0.2.4-x86_64-linux) sha256=585ba238aca56ba7786faf911753382dcad988acbdbba1ba6e1a4689fb6a2d3b
   mini_portile2 (2.8.9) sha256=0cd7c7f824e010c072e33f68bc02d85a00aeb6fce05bb4819c03dfd3c140c289
   minitest (5.27.0) sha256=2d3b17f8a36fe7801c1adcffdbc38233b938eb0b4966e97a6739055a45fa77d5
+  nokogiri (1.19.4) sha256=50c951611c92bca05c51411aef45f1cbc50f2821c4802758c5c6d34696533ab5
+  nokogiri (1.19.4-aarch64-linux-gnu) sha256=1269fb644a6de405057a53dd5c762b1209b43ca7424f839454d3dbc677c31a8f
+  nokogiri (1.19.4-arm64-darwin) sha256=a46db9853286e6597b36ebc6953817d15acf3a299583eb3f89fdc6f91dd63527
+  nokogiri (1.19.4-x86_64-darwin) sha256=7fd17057d3e1f00e9954a74b3cd76595d3d4a5ef233b7ed9599047c204f70551
+  nokogiri (1.19.4-x86_64-linux-gnu) sha256=379fae440b28915e3f19d752ce2dcf8465ed2b2fbefd2a7ca0dd497bc981a06a
+  openssl (4.0.2) sha256=1037ad2868ae58df9ad917891c0c0f9815a1172f6846d4bcdd508e4c2ee747c2
+  plat4m (1.1.8) sha256=33a75459129a68b4b2480934e5c1006a9bedd7c99c28fa8641f049f24471b211
+  power_assert (3.1.0) sha256=fefe98ed5d3140628138f3f9f9194d6ece01f1320e69700d3c928adca7518251
+  racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
   rake (13.4.2) sha256=cb825b2bd5f1f8e91ca37bddb4b9aaf345551b4731da62949be002fa89283701
   scarpe-components (0.4.0) sha256=b7bf23204b90521b2e150d2152cde2a10dd6e4ec53d1946f8118b3c7bcecca7b
+  wxruby3 (1.8.1) sha256=e23028d5f6fe1aec969ca1ad6a11e82d51614cff25f623101d22ecf085be7fe0
 
 BUNDLED WITH
   4.0.17

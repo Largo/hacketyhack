@@ -43,6 +43,9 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.4-x86_64-linux-musl)
       racc (~> 1.4)
+    openssl (4.0.2)
+    plat4m (1.1.8)
+    power_assert (3.1.0)
     racc (1.8.1)
     rake (13.4.2)
     scarpe-components (0.4.0)
@@ -54,6 +57,13 @@ GEM
     sqlite3 (2.9.5-x86_64-darwin)
     sqlite3 (2.9.5-x86_64-linux-gnu)
     sqlite3 (2.9.5-x86_64-linux-musl)
+    wxruby3 (1.8.1)
+      minitest (>= 5.15)
+      nokogiri (~> 1.12)
+      openssl (~> 4.0)
+      plat4m (~> 1.1)
+      power_assert (~> 3.0)
+      rake
 
 PLATFORMS
   aarch64-linux
@@ -73,6 +83,7 @@ DEPENDENCIES
   nokogiri
   rake
   sqlite3
+  wxruby3 (~> 1.8)
 
 CHECKSUMS
   bundler (4.0.18) sha256=02d9a17429de1847b4e0c9f27a9ee4b20c0a74c0a641b4e77195d6019e3618ac
@@ -96,6 +107,9 @@ CHECKSUMS
   nokogiri (1.19.4-x86_64-darwin) sha256=7fd17057d3e1f00e9954a74b3cd76595d3d4a5ef233b7ed9599047c204f70551
   nokogiri (1.19.4-x86_64-linux-gnu) sha256=379fae440b28915e3f19d752ce2dcf8465ed2b2fbefd2a7ca0dd497bc981a06a
   nokogiri (1.19.4-x86_64-linux-musl) sha256=17dfb7c1fa194ae02fbf7c51a7afc8d278045ab3fdacfd86f91d02d7b274470b
+  openssl (4.0.2) sha256=1037ad2868ae58df9ad917891c0c0f9815a1172f6846d4bcdd508e4c2ee747c2
+  plat4m (1.1.8) sha256=33a75459129a68b4b2480934e5c1006a9bedd7c99c28fa8641f049f24471b211
+  power_assert (3.1.0) sha256=fefe98ed5d3140628138f3f9f9194d6ece01f1320e69700d3c928adca7518251
   racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
   rake (13.4.2) sha256=cb825b2bd5f1f8e91ca37bddb4b9aaf345551b4731da62949be002fa89283701
   scarpe-components (0.4.0) sha256=b7bf23204b90521b2e150d2152cde2a10dd6e4ec53d1946f8118b3c7bcecca7b
@@ -107,6 +121,7 @@ CHECKSUMS
   sqlite3 (2.9.5-x86_64-darwin) sha256=8e9caae38bd7ebb29cbeee3e7ab1d12dc2327d9a1b92c7fcf0dda05589627a81
   sqlite3 (2.9.5-x86_64-linux-gnu) sha256=233dbcb6714148dd23bc5aeb33e8efd6eac974969564ddd5794c23d5f52b231e
   sqlite3 (2.9.5-x86_64-linux-musl) sha256=e7d3a7474e8af0f96150c21abc203fbab5437206bfcdf11deab7741c0ca516f2
+  wxruby3 (1.8.1) sha256=e23028d5f6fe1aec969ca1ad6a11e82d51614cff25f623101d22ecf085be7fe0
 
 BUNDLED WITH
   4.0.18

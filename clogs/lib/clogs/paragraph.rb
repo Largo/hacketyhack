@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Whichever backend's TextBlock is in play; clogs.rb loads it.
-require_relative "text" unless Clogs.fox?
+# Whichever backend's TextBlock is in play; clogs.rb loads it. This is libui's.
+require_relative "text" if Clogs.libui?
 
 module Clogs
   # Word-level text layout.

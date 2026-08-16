@@ -35,20 +35,22 @@ tree; Clogs is a Lacci *display service* and owns the pixels.
 ```
 your Shoes program
         |
-      Lacci          the Shoes DSL, drawable tree, events
+      Lacci             the Shoes DSL, drawable tree, events
         |
-      Clogs          layout, painting, widgets, input
+      Clogs             layout, painting, widgets, input
         |
-   libui  or  FOX    one native window, one canvas
+ libui / FOX / wx       one native window, one canvas
 ```
 
-The bottom layer is swappable. libui is the default; `CLOGS_BACKEND=fox` runs
-the same Clogs on [FXRuby](https://github.com/larskanis/fxruby) instead, which
-blits bitmaps rather than painting them as rectangles and is between 3x and
-118x faster per frame as a result -- at the cost of antialiasing and alpha
-compositing. Both pass the same 11 of 12 Shoes samples. The measurements, the
-trade-offs and `rake compare` are in
-[docs/fox_vs_libui.md](docs/fox_vs_libui.md).
+The bottom layer is swappable. libui is the default because it is the only one
+that installs without a compiler; `CLOGS_BACKEND=fox` runs the same Clogs on
+[FXRuby](https://github.com/larskanis/fxruby) and `CLOGS_BACKEND=wx` on
+[wxRuby3](https://github.com/mcorino/wxRuby3). All three pass the same 11 of 12
+Shoes samples. Both alternatives can blit a bitmap, which libui cannot, making
+an artwork-heavy frame 10x to 100x cheaper; wx matches libui's drawing exactly,
+while FOX trades antialiasing and alpha for more speed still. The
+measurements, the trade-offs and `rake compare` are in
+[docs/backends.md](docs/backends.md).
 
 You can also select it explicitly, which is useful when the same program should
 run under Scarpe's webview backend too:

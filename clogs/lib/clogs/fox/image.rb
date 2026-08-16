@@ -19,7 +19,7 @@ module Clogs
   # antialiased edge becomes a hard one, and a pixel that is half transparent
   # is drawn fully opaque rather than blended with what is under it. This is
   # the one place where the libui backend is unambiguously better, because
-  # Cairo composites properly. See docs/fox_vs_libui.md.
+  # Cairo composites properly. See docs/backends.md.
   class Image < Drawable
     class << self
       def cache

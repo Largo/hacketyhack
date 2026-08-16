@@ -43,18 +43,26 @@ bundle install
 ruby hacketyhack.rb    # the IDE
 rake samples           # the bundled Shoes programs, headless
 rake boot              # IDE smoke test
-rake compare           # time a frame on both Clogs backends
+rake compare           # time a frame on every Clogs backend
 ```
 
-Clogs has two interchangeable display backends. libui is the default; setting
-`CLOGS_BACKEND=fox` runs the same Clogs over FXRuby instead. Both boot the IDE
-and pass the same 11 of the 12 samples, but FOX blits bitmaps where libui has
-to paint them as rectangles, which makes a frame of Hackety Hack's artwork
-between 8x and 118x cheaper -- at the cost of antialiasing and alpha
-compositing. The measurements and the trade-offs are in
-[`clogs/docs/fox_vs_libui.md`](clogs/docs/fox_vs_libui.md).
+Clogs has three interchangeable display backends: libui (the default), FOX via
+FXRuby, and wxWidgets via wxRuby3. All three boot the IDE and pass the same 11
+of the 12 samples. They differ in what a frame costs, because libui cannot blit
+a bitmap and has to paint pictures as rectangles:
 
-Eleven of the twelve Shoes programs in `samples/` run unmodified on either
+| median frame | libui | fox | wx |
+|---|---|---|---|
+| the splash hand, 256x256 with alpha | 17.96 ms | 0.17 ms | 0.40 ms |
+| 40 styled paragraphs | 67.72 ms | 9.60 ms | 67.72 ms |
+
+wx draws identically to libui -- it is the same Cairo -- and is the best
+backend for Hackety Hack; FOX is faster still but loses antialiasing and alpha;
+libui is the easiest to install by a wide margin, which is why it stays the
+default. `rake compare` reproduces the table, and the trade-offs are in
+[`clogs/docs/backends.md`](clogs/docs/backends.md).
+
+Eleven of the twelve Shoes programs in `samples/` run unmodified on every
 backend — `Clock`, `Scribble`, `Pong`, `Duel`, `Follow`, `Arcs`, `Fractal`,
 `Funnies`, `Animated Flowers` and both `Turtle` programs — exercising
 animation, `clear`/redraw, mouse input, art drawables, turtle widgets and
@@ -81,9 +89,10 @@ Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 Hpricot, which has not built since 2010, is replaced by a Nokogiri shim, and
 the dead hackety.org version check no longer crashes startup.
 
-**Still rough.** The editor tab is not usable yet, the online features point at
-a server that no longer exists, and large images are expensive to draw — see
-the note on libui and bitmaps in the coverage matrix.
+**Still rough.** The editor tab is not usable yet and the online features point
+at a server that no longer exists. Large images are expensive to draw on the
+default backend — see the note on libui and bitmaps in the coverage matrix, and
+`CLOGS_BACKEND=wx` for the version of Clogs that does not have that problem.
 
 ## Development
 
@@ -92,6 +101,13 @@ bundle install
 rake samples                                  # the Shoes samples, headless
 cd clogs && rake test                         # Clogs' own suite
 ruby -Iclogs/lib clogs/examples/kitchen_sink.rb
+
+# The alternative backends are optional; each needs its toolkit's headers.
+sudo apt-get install libfox-1.6-dev libxrandr-dev            # for fox
+sudo apt-get install libwxgtk3.2-dev libwxgtk-webview3.2-dev \
+                     libwxgtk-media3.2-dev swig doxygen      # for wx
+bundle config set --local with "fox wx" && bundle install
+CLOGS_BACKEND=wx rake samples
 ```
 
 On a headless machine, prefix GUI commands with `xvfb-run -a`.

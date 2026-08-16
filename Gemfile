@@ -21,7 +21,19 @@ end
 #
 #   bundle config set --local with fox && bundle install
 #
-# The default libui backend needs none of that; see clogs/docs/fox_vs_libui.md.
+# The default libui backend needs none of that; see clogs/docs/backends.md.
 group :fox, optional: true do
   gem "fxruby", "~> 1.6"
+end
+
+# Clogs' wx backend (CLOGS_BACKEND=wx). wxRuby3 is a SWIG-generated C++
+# extension: it needs wxWidgets 3.2's development headers, SWIG and doxygen,
+# and a post-install `wxruby setup` step that compiles for several minutes.
+# On Debian and Ubuntu that is libwxgtk3.2-dev, libwxgtk-webview3.2-dev,
+# libwxgtk-media3.2-dev, swig and doxygen. Optional for the same reason:
+#
+#   bundle config set --local with wx && bundle install && wxruby setup
+#
+group :wx, optional: true do
+  gem "wxruby3", "~> 1.8"
 end

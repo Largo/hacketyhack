@@ -37,7 +37,7 @@ task :run do
   ruby "-Iclogs/lib -I. hacketyhack.rb"
 end
 
-desc "Time a frame on both Clogs backends: rake compare"
+desc "Time a frame on every Clogs backend: rake compare"
 task :compare do
   require "open3"
 
@@ -52,8 +52,9 @@ task :compare do
     ["40 styled paragraphs", "tools/bench_text.rb", nil]
   ]
 
+  backends = (ENV["BACKENDS"] || "libui fox wx").split
   results = {}
-  %w[libui fox].each do |backend|
+  backends.each do |backend|
     cases.each do |label, script, image|
       env = { "CLOGS_BACKEND" => backend, "CLOGS_EXIT_AFTER_MS" => "5000" }
       env["BENCH_IMAGE"] = image if image
@@ -68,18 +69,24 @@ task :compare do
   end
 
   puts
-  puts format("%-22s %14s %14s %10s", "page", "libui p50", "fox p50", "speedup")
-  puts "-" * 64
+  header = format("%-22s", "page") + backends.map { |b| format("%14s", "#{b} p50") }.join
+  puts header
+  puts "-" * header.length
+  base = backends.first
   cases.each do |label, _script, _image|
-    a = results[["libui", label]]
-    b = results[["fox", label]]
-    next puts format("%-22s %14s %14s %10s", label, a || "?", b || "?", "?") unless a && b
-
-    puts format("%-22s %11.2f ms %11.2f ms %9.1fx", label, a, b, a / b)
+    row = format("%-22s", label)
+    backends.each do |backend|
+      ms = results[[backend, label]]
+      row += ms ? format("%11.2f ms", ms) : format("%14s", "?")
+    end
+    a = results[[base, label]]
+    slowest = backends.filter_map { |b| results[[b, label]] }.max
+    row += format("   (%.0fx spread)", slowest / backends.filter_map { |b| results[[b, label]] }.min) if a && slowest
+    puts row
   end
   puts
   puts "p50 is the median time to paint the whole Shoes document, over a 5s run"
-  puts "with a 60fps animation driving the repaints."
+  puts "with a 60fps animation driving the repaints. BACKENDS=\"libui wx\" to narrow."
 end
 
 desc "Boot the Hackety Hack IDE headlessly and check it builds its window"

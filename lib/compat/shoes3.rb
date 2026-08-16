@@ -12,6 +12,14 @@
 # already provide it -- so as Lacci catches up these shims quietly stop being
 # used.
 
+# Nokogiri comes first on purpose. It carries its own libxml2 inside its
+# precompiled extension, but wxWidgets links the system's, and whichever is
+# loaded first is the one Nokogiri ends up calling. Under CLOGS_BACKEND=wx in
+# the other order Nokogiri silently binds to whatever libxml2 the distribution
+# ships -- 2.9.14 against the 2.13.9 it was built for, on Ubuntu 24.04 -- and
+# warns about it on stderr. Loading it first keeps its own.
+require "nokogiri"
+
 require "clogs"
 
 # `require "hpricot"` in a user program should find our Nokogiri-backed shim.
@@ -696,4 +704,19 @@ rescue LoadError
 end
 
 # Slots that registered a `finish` block expect it to run on shutdown.
+#
+# Shoes 3 ran them while the app was still up. at_exit alone is too late for a
+# display library that takes its world down with the event loop: on wx, every
+# drawable call after that raises NameError, because the application object the
+# fonts and bitmaps belong to no longer exists. So they run as the app is
+# destroyed -- which is both closer to Shoes 3 and the only point at which they
+# can do anything -- and at_exit stays as the backstop for a block registered
+# after that, or by a program that never opened a window at all.
+Clogs::App.prepend(Module.new do
+  def destroy
+    Shoes::Compat.run_finish_blocks unless @destroyed
+    super
+  end
+end)
+
 at_exit { Shoes::Compat.run_finish_blocks }
