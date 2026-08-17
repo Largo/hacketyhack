@@ -8,16 +8,24 @@
 #
 # Anything after the program's path is left in ARGV for the program itself.
 
+# TEMPORARY: Scarpe's webview display service is the default backend while
+# it's being evaluated against libui (see clogs/lib/clogs/webview.rb).
+# CLOGS_BACKEND=libui switches back to the validated libui renderer.
+# lib/compat/shoes3.rb (below) reads the same variable to require the
+# matching Clogs entry point. To restore libui as the default, flip this
+# ternary back (webview opt-in, not opt-out).
+clogs_entry = ENV["CLOGS_BACKEND"] == "libui" ? "clogs" : "clogs/webview"
+
 # Hackety Hack keeps a Shoes 3 compatibility layer (hash-style args, its
 # hpricot shim, ...) at lib/compat/shoes3.rb for the legacy samples bundled
-# with it, and that file requires "clogs" itself. Load it when running from
-# that tree, so `clogs samples/*.rb` behaves like `rake samples`; a clogs
-# checkout used on its own just runs plain Clogs.
+# with it, and that file requires a Clogs entry point itself. Load it when
+# running from that tree, so `clogs samples/*.rb` behaves like `rake
+# samples`; a clogs checkout used on its own just runs plain Clogs.
 shoes3_compat = File.join(Dir.pwd, "lib", "compat", "shoes3.rb")
 if File.exist?(shoes3_compat)
   require shoes3_compat
 else
-  require "clogs"
+  require clogs_entry
 end
 
 path = ARGV.shift

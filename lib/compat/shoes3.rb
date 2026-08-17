@@ -12,7 +12,12 @@
 # already provide it -- so as Lacci catches up these shims quietly stop being
 # used.
 
-require "clogs"
+# TEMPORARY: Scarpe's webview display service is the default backend while
+# it's being evaluated against libui (see clogs/lib/clogs/webview.rb).
+# CLOGS_BACKEND=libui switches back to the validated libui renderer. To
+# restore libui as the default, flip this ternary back (webview opt-in, not
+# opt-out).
+require(ENV["CLOGS_BACKEND"] == "libui" ? "clogs" : "clogs/webview")
 
 # `require "hpricot"` in a user program should find our Nokogiri-backed shim.
 $LOAD_PATH.unshift(File.expand_path("../shims", __dir__))
