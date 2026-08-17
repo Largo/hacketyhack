@@ -50,9 +50,9 @@ module Clogs
 
       # Targeted at this app's own id so a second Shoes.app's init/run/destroy
       # doesn't also fire on every other app already running (see
-      # Shoes3AppScopedLifecycleEvents in lacci_compat.rb for the other half
-      # of this -- what makes Shoes::App dispatch with that id instead of
-      # nil in the first place).
+      # Shoes3AppScopedLifecycleEvents below for the other half of this --
+      # what makes Shoes::App dispatch with that id instead of nil in the
+      # first place).
       bind_shoes_event(event_name: "init", target: @shoes_linkable_id) { init }
       bind_shoes_event(event_name: "run", target: @shoes_linkable_id) { run }
       bind_shoes_event(event_name: "destroy", target: @shoes_linkable_id) { destroy }
@@ -497,6 +497,47 @@ module Clogs
 
     def report_error(error)
       App.report_error(error)
+    end
+  end
+end
+
+class Shoes::App
+  # Lacci's own App lifecycle events (init/run/destroy, plus the
+  # @watch_for_destroy and @watch_for_event_loop subscriptions set up in
+  # #initialize) all bind and dispatch with no target, which broadcasts to
+  # every Shoes::App in the process. That's harmless with one app, but with
+  # Clogs' :multi_app support a second Shoes.app's init/run/destroy would
+  # fire on every other running app too -- closing one window would destroy
+  # them all. Default the target to this app's own linkable_id whenever a
+  # caller doesn't specify one, so each app's lifecycle events stay its own.
+  #
+  # This lives here rather than in lacci_compat.rb because it's specific to
+  # how Clogs::App wires up its own lifecycle binds above -- Scarpe's webview
+  # display service binds its own lifecycle events differently, and forcing
+  # this same scoping onto it stops Shoes::App#run from ever blocking (the
+  # "run" event it waits on never reaches a handler bound under a different
+  # target).
+  module Shoes3AppScopedLifecycleEvents
+    def send_shoes_event(*args, event_name:, target: nil, **kwargs)
+      super(*args, event_name: event_name, target: target || linkable_id, **kwargs)
+    end
+
+    def bind_shoes_event(event_name:, target: nil, &block)
+      super(event_name: event_name, target: target || linkable_id, &block)
+    end
+  end
+  prepend Shoes3AppScopedLifecycleEvents
+
+  # Shoes 3 read and wrote the system clipboard through the app. Reaches into
+  # Clogs::Clipboard directly, so it belongs with the rest of the libui-backed
+  # App, not the display-service-agnostic shims in lacci_compat.rb.
+  unless method_defined?(:clipboard)
+    def clipboard
+      Clogs::Clipboard.read
+    end
+
+    def clipboard=(text)
+      Clogs::Clipboard.write(text.to_s)
     end
   end
 end

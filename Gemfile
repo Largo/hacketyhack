@@ -47,3 +47,16 @@ end
 group :gtk3, optional: true do
   gem "gtk3", "~> 4.3"
 end
+
+# Spike: an alternate Clogs backend on Scarpe's own webview display service
+# instead of libui (see clogs/lib/clogs/webview.rb). Neither gem has a
+# released version compatible with our `lacci >= 0.5.0` pin yet -- the
+# released `scarpe` wants `lacci ~> 0.4.0`, and released `lacci` 0.5.0 wants
+# `scarpe-components ~> 0.4.0` while scarpe's git main wants `~> 0.5.0` --
+# so both come from the local scarpe checkout until upstream cuts matching
+# releases. `bundle config set --local without webview` and re-resolving
+# drops this group entirely.
+group :webview do
+  gem "scarpe", path: "../scarpe"
+  gem "lacci", path: "../scarpe/lacci"
+end

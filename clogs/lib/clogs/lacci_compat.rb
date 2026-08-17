@@ -50,7 +50,14 @@ end
 # backgrounds also carry geometry (`background "#cdc", :width => 38`) and are
 # shown/hidden dynamically, so the drawable keeps its whole options hash and
 # `background` returns it.
-unless Shoes.const_defined?(:BackgroundDrawable)
+# Newer Lacci (as paired with Scarpe's webview display service) ships
+# `Shoes::Background` itself as a real drawable class, making this shim both
+# unnecessary and impossible to load -- reopening it `module Shoes::Background`
+# below would raise TypeError against a class. Skip the whole shim there.
+background_drawable_needed = !Shoes.const_defined?(:BackgroundDrawable) &&
+  !(Shoes.const_defined?(:Background) && Shoes::Background.is_a?(Class))
+
+if background_drawable_needed
   class Shoes::BackgroundDrawable < Shoes::Drawable
     shoes_styles :fill, :curve
 
@@ -74,25 +81,6 @@ unless Shoes.const_defined?(:BackgroundDrawable)
 end
 
 class Shoes::App
-  # Lacci's own App lifecycle events (init/run/destroy, plus the
-  # @watch_for_destroy and @watch_for_event_loop subscriptions set up in
-  # #initialize) all bind and dispatch with no target, which broadcasts to
-  # every Shoes::App in the process. That's harmless with one app, but with
-  # Clogs' :multi_app support a second Shoes.app's init/run/destroy would
-  # fire on every other running app too -- closing one window would destroy
-  # them all. Default the target to this app's own linkable_id whenever a
-  # caller doesn't specify one, so each app's lifecycle events stay its own.
-  module Shoes3AppScopedLifecycleEvents
-    def send_shoes_event(*args, event_name:, target: nil, **kwargs)
-      super(*args, event_name: event_name, target: target || linkable_id, **kwargs)
-    end
-
-    def bind_shoes_event(event_name:, target: nil, &block)
-      super(event_name: event_name, target: target || linkable_id, &block)
-    end
-  end
-  prepend Shoes3AppScopedLifecycleEvents
-
   # `app.clear { ... }` empties the top-level slot and optionally refills it.
   # Animated Shoes programs redraw themselves this way on every frame.
   unless method_defined?(:clear)
@@ -122,17 +110,6 @@ class Shoes::App
       else "xdg-open"
       end
       system(opener, url.to_s, out: File::NULL, err: File::NULL)
-    end
-  end
-
-  # Shoes 3 read and wrote the system clipboard through the app.
-  unless method_defined?(:clipboard)
-    def clipboard
-      Clogs::Clipboard.read
-    end
-
-    def clipboard=(text)
-      Clogs::Clipboard.write(text.to_s)
     end
   end
 end

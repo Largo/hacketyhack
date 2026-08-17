@@ -20,7 +20,14 @@
 # warns about it on stderr. Loading it first keeps its own.
 require "nokogiri"
 
-require "clogs"
+# CLOGS_BACKEND=webview is an alternate Clogs entry point that renders
+# through Scarpe's own webview display service instead of Clogs' native
+# renderers -- see clogs/lib/clogs/webview.rb. It bypasses clogs.rb's own
+# BACKENDS dispatch entirely (Scarpe requires "shoes"/Lacci itself and
+# registers its own display service), so it has to branch before that
+# require rather than go through Clogs.backend like libui/fox/wx/qt/gtk3/
+# nappgui do.
+require(ENV["CLOGS_BACKEND"] == "webview" ? "clogs/webview" : "clogs")
 
 # `require "hpricot"` in a user program should find our Nokogiri-backed shim.
 $LOAD_PATH.unshift(File.expand_path("../shims", __dir__))
