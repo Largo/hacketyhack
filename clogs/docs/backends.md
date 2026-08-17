@@ -304,7 +304,7 @@ the shortest of the six, and the parts around it assume they own the program.
   convention of a zero-based enum with fill first produced a window in which
   only outlines appeared — which is at least a fast way to find out.
 
-Three shared bugs also fell out of writing the display half six times:
+Four shared bugs also fell out of writing the display half six times:
 
 - **Paragraph reported a wrapped paragraph wider than the width it was asked to
   wrap at**, because it measured to the pen position rather than to the last
@@ -316,6 +316,17 @@ Three shared bugs also fell out of writing the display half six times:
   raise.** NAppGUI's answers a zero extent before its SDK is up rather than
   failing, so the tests that need measurement ran and failed on the zero. The
   probe now judges measurement by its answer.
+- **Hackety Hack's sidebar tabs could not be clicked on any backend.** Six
+  backends behaving identically is a good way to tell a display bug from one
+  that is not: this is not. Two things had to be true and neither was. Shoes 3 attaches a handler
+  with `image(icon).click { }`, and the compatibility layer subscribed to the
+  drawable's click event without setting the `:click` style that
+  `Clogs::Image#clickable?` reads -- so the icon was never hit-tested and the
+  subscription never fired. Underneath that, every slot was clickable by
+  default, so a full-window slot painted after the sidebar won the hit test
+  and swallowed the click anyway. A slot is now a click target only if
+  something is listening for one; handlers on enclosing slots still fire,
+  because a release bubbles up from the drawable that was pressed.
 
 ## The cost of the dependency
 

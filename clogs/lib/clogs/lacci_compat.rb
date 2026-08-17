@@ -24,6 +24,12 @@ module Clogs
 end
 Shoes::SubscriptionItem.prepend(Clogs::SubscriptionItemSingleBind)
 
+# Shoes lets you click a slot, but Lacci declares no `click` style for one, so
+# nothing tells the display side which slots want a click and which are merely
+# in the way. Clogs::Slot#clickable? reads exactly this style: without it every
+# slot is a click target, and a slot covering another swallows its clicks.
+Shoes::Slot.shoes_styles(:click) unless Shoes::Slot.shoes_style_name?(:click)
+
 # Shoes lets an art drawable carry its own fill/stroke/strokewidth
 # (`star ..., :fill => red`); Lacci 0.5.0 only takes those from the draw
 # context.

@@ -399,8 +399,23 @@ class Shoes::Drawable
       Shoes::DisplayService.subscribe_to_event(event.to_s, linkable_id) do |*args|
         block.arity.zero? ? block.call : block.call(self, *args)
       end
+      # Subscribing is not enough on its own. A drawable that declares a
+      # `:click` style uses it to mean "I am clickable" -- Clogs' image asks
+      # for exactly that before it will accept a hit -- so a handler attached
+      # the Shoes 3 way has to set it too, or the display side never hit-tests
+      # the drawable and the subscription above is never fired. This is what
+      # made Hackety Hack's sidebar unclickable on every backend: its tab icons
+      # are `image(icon).hover{}.leave{}.click{}`, and the hit went to the
+      # enclosing slot instead.
+      self.click = block if event == :click && self.class.shoes_style_name?("click") && !click_style_set?
       self
     end
+  end
+
+  # `click` is both the style getter and the handler-attaching method above, so
+  # the style has to be read the long way round.
+  def click_style_set?
+    !instance_variable_get(:@click).nil?
   end
 
   # Shoes 3 lets any drawable be toggled or removed.
