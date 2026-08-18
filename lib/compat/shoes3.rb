@@ -303,7 +303,14 @@ class Shoes::Slot
         slot = self
         super(*args) do |button, x, y|
           peer = Shoes::Compat.display_peer(slot)
-          blk.call(button, x, y) if peer.respond_to?(:contains?) && peer.contains?(x, y)
+          # Only Clogs' peers broadcast click/release app-wide and need a hit
+          # test; Scarpe's webview peers are backed by real DOM elements
+          # whose click events are already scoped to themselves.
+          if peer.respond_to?(:contains?)
+            blk.call(button, x, y) if peer.contains?(x, y)
+          else
+            blk.call(button, x, y)
+          end
         end
       end
     end
@@ -319,7 +326,15 @@ class Shoes::Slot
         was_inside = false
         super(*args) do |*cb_args|
           peer = Shoes::Compat.display_peer(slot)
-          _b, mx, my = peer&.app&.mouse_state
+          # Only Clogs' peers broadcast hover/leave app-wide and need a hit
+          # test reconstructed from the pointer's last known position;
+          # Scarpe's webview peers are backed by real DOM elements whose
+          # mouseenter/mouseleave are already scoped to themselves.
+          unless peer.respond_to?(:app)
+            blk.call(*cb_args)
+            next
+          end
+          _b, mx, my = peer.app&.mouse_state
           inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
           fire = event == :hover ? inside && !was_inside : !inside && was_inside
           was_inside = inside
@@ -437,6 +452,38 @@ class Shoes::Drawable
   def show
     self.hidden = false
   end unless method_defined?(:show)
+
+  # Shoes 3 code that needs a drawable's real on-screen position (Hackety
+  # Hack's tooltip placement walks up the parent chain summing :left/:top)
+  # assumed every ancestor slot carried an explicit style, which broke on any
+  # flow-positioned ancestor -- there the style is simply unset, not 0. The
+  # display side already resolves a real absolute position every paint, for
+  # hit-testing (Clogs::Drawable#abs_x/#abs_y); expose that instead.
+  def absolute_left
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:abs_x) ? peer.abs_x : (left || 0)
+  end unless method_defined?(:absolute_left)
+
+  def absolute_top
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:abs_y) ? peer.abs_y : (top || 0)
+  end unless method_defined?(:absolute_top)
+
+  # `width`/`height` are plain shoes_styles -- a set value round-tripped back,
+  # never the actual rendered size. Shoes 3 could ask an auto-sized drawable
+  # (a `para` with no explicit :width) how wide its text came out; Lacci has
+  # no such report, so that style stays nil forever. The display side knows
+  # -- Clogs::Drawable#measure sets a real @width/@height every layout pass
+  # -- so read that instead. Before the first layout pass it is 0, not nil.
+  def measured_width
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:width) ? peer.width : (width || 0)
+  end unless method_defined?(:measured_width)
+
+  def measured_height
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:height) ? peer.height : (height || 0)
+  end unless method_defined?(:measured_height)
 end
 
 # Shoes 3's `image(width, height) { ... }` made an off-screen canvas to draw
@@ -734,7 +781,17 @@ end
 # destroyed -- which is both closer to Shoes 3 and the only point at which they
 # can do anything -- and at_exit stays as the backstop for a block registered
 # after that, or by a program that never opened a window at all.
-Clogs::App.prepend(Module.new do
+#
+# Which App class that is depends on the backend: Clogs::App for every native
+# renderer, Scarpe::Webview::App under CLOGS_BACKEND=webview -- only one of
+# the two is ever loaded, so pick whichever answered.
+hh_app_class =
+  if defined?(Clogs::App)
+    Clogs::App
+  elsif defined?(Scarpe::Webview::App)
+    Scarpe::Webview::App
+  end
+hh_app_class&.prepend(Module.new do
   def destroy
     Shoes::Compat.run_finish_blocks unless @destroyed
     super
