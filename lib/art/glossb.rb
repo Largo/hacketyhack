@@ -9,25 +9,29 @@ class Glossb < Shoes::Widget
       when "red"; fg, bgfill = "#FF5", "#F30"
     end
 
-    txt = link(name, :underline => 'none', :stroke => fg) {}
     stack :margin => 4 do
       background bgfill, :curve => 5
-      @txt = para txt, :align => 'center', :margin => 4, :size => 11
+      @txt = para link(name, :underline => 'none', :stroke => fg) {},
+        :align => 'center', :margin => 4, :size => 11
       hover { @over.show }
       leave { @over.hide }
     end
 
     @over = stack :top => 0, :left => 0, :margin => 2, :hidden => true do
       background bgfill, :curve => 5
-      @txt_over = para txt, :align => 'center', :margin => 4, :size => 14, :weight => "bold"
+      @txt_over = para link(name, :underline => 'none', :stroke => fg) {},
+        :align => 'center', :margin => 4, :size => 14, :weight => "bold"
     end
     @fg = fg
     click &blk
   end
 
   def text= txt
-    new_link = link(txt, :underline => 'none', :stroke => @fg) {}
-    @txt.replace(new_link)
-    @txt_over.replace(new_link)
+    # A Link belongs to one parent para; the normal and hover labels each
+    # need their own instance rather than sharing one, or setting the
+    # second para's content reparents the link away from the first and
+    # leaves it empty (see the same fix in #initialize).
+    @txt.replace(link(txt, :underline => 'none', :stroke => @fg) {})
+    @txt_over.replace(link(txt, :underline => 'none', :stroke => @fg) {})
   end
 end

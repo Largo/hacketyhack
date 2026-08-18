@@ -509,8 +509,18 @@ void clogs_nap_view_update(void *view) { view_update((View *)view); }
 
 static color_t i_color(unsigned int rgba)
 {
+    uint8_t a = (uint8_t)(rgba & 0xff);
+
+    /* draw2d reserves color_t values with a zero alpha byte for its own
+     * indexed-palette colors (system colors below 0x10000), and asserts on
+     * any other zero-alpha value. Clogs passes fully transparent colors --
+     * "no fill", "no stroke" -- with whatever RGB bits their source color
+     * happened to carry, which trips that assert whenever they're nonzero. */
+    if (a == 0)
+        return color_rgba(0, 0, 0, 0);
+
     return color_rgba((uint8_t)((rgba >> 24) & 0xff), (uint8_t)((rgba >> 16) & 0xff),
-                      (uint8_t)((rgba >> 8) & 0xff), (uint8_t)(rgba & 0xff));
+                      (uint8_t)((rgba >> 8) & 0xff), a);
 }
 
 void clogs_nap_clear(void *ctx, unsigned int rgba)

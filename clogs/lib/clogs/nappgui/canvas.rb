@@ -91,9 +91,17 @@ module Clogs
 
     # ---- events from the shim -------------------------------------------
 
+    # NAppGUI hands paint a blank DCtx with no defined starting colour --
+    # GTK and libui's drawing surfaces come pre-painted white by their
+    # widget theme, but this one doesn't, so a document that never draws
+    # its own full-window background (most Shoes pages don't) would
+    # otherwise show through to whatever was last in that memory.
+    WHITE = 0xFFFFFFFF
+
     def paint(ctx, width, height)
       return if @destroyed
 
+      Shim.clear(ctx, WHITE)
       @on_draw&.call(Painter.new(ctx, width, height), nil)
     end
 

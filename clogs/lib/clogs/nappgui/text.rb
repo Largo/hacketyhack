@@ -34,10 +34,29 @@ module Clogs
         @extents = nil
       end
 
+      # draw2d wants a literal Pango family name and asserts on anything
+      # else, so a fontconfig alias like "Sans" -- what Clogs uses as its
+      # cross-backend default, since every *other* backend resolves it via
+      # its toolkit's own font description parsing -- has to be turned into
+      # one first. `fc-match` does that; its answer only depends on the
+      # alias and the machine's installed fonts, so it is cached per family
+      # rather than shelled out to on every draw.
+      def resolved_family(family)
+        (@resolved ||= {}).fetch(family) do
+          @resolved[family] = begin
+            require "open3"
+            out, status = Open3.capture2("fc-match", "-f", "%{family}", family)
+            status.success? && !out.strip.empty? ? out.strip : family
+          rescue StandardError
+            family
+          end
+        end
+      end
+
       def font_for(family, size, bold, italic, underline, strike)
         key = [family, size, bold, italic, underline, strike]
         cache[key] ||= Shim.font(
-          (family || Clogs.default_font_family).to_s,
+          resolved_family((family || Clogs.default_font_family).to_s),
           (size || Clogs.default_font_size).to_f,
           bold ? 1 : 0, italic ? 1 : 0, underline ? 1 : 0, strike ? 1 : 0
         )
