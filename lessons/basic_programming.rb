@@ -38,7 +38,7 @@ lesson_set "2: Basic Programming" do
       para strong("close"), ": closes the tutor"
     end
     para "Don't forget! Press "
-    icon_button :arrow_right, nil
+    icon_button(:arrow_right, nil) { next_page }
     para "to move to the next part. Have at it!"
   end
 

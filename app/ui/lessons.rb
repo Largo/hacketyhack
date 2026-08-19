@@ -149,7 +149,7 @@ end
 # class to load and execute the level sets
 class HH::LessonSet
   include HH::Observable
-  
+
   def initialize name, blk
     # content of @lessons:
     # name, pages = @lessons[lesson_n]
@@ -169,6 +169,14 @@ class HH::LessonSet
     # loads saved lesson and page, of 0, 0, by default
     # differently from what is displayed in the UI,
     # internally @lesson and @page start at 0
+    #
+    # this is a deliberate "resume where you left off" feature, keyed by
+    # @name (see save_lesson below) -- so clicking a lesson set's link
+    # again from the sidebar does NOT restart it at page 1, it reopens
+    # wherever the lesson was last closed. since each sub-page's subtitle
+    # can look completely unrelated to the lesson set's own name (e.g. the
+    # tour's "Preferences" page), this can read as "the wrong lesson
+    # opened" even though the correct lesson set loaded correctly.
     @lesson = (HH::PREFS["tut_lesson_#@name"] || "0").to_i
     @page = (HH::PREFS["tut_page_#@name"] || "0").to_i
     @container.slot = slot
@@ -244,20 +252,38 @@ class HH::LessonSet
 
         instance_eval &page_block
       end
-      
+
       flow :height => 32,  :bottom => 0, :right => 0 do
-        icon_button :arrow_left, "Previous", :left => 10 do
-          lesson_set.previous_page
+        # Previous and Next sit right next to each other, matching how
+        # someone actually flips through pages -- Menu used to be
+        # positioned between them (Previous=10, Next=100, Menu=55), so a
+        # slightly-off click aimed at Next during normal back-and-forth
+        # paging would land on Menu instead and swap the whole lesson pane
+        # over to the Index screen, which reads as "the tutorial closed".
+        stack :left => 10, :width => 34, :height => 34 do
+          stroke "#f00"
+          strokewidth 2
+          nofill
+          rect 0, 0, 34, 34
+          icon_button :arrow_left, "Previous" do
+            lesson_set.previous_page
+          end
         end
-        icon_button :arrow_right, "Next", :left => 100 do
-          lesson_set.next_page
+        stack :left => 85, :width => 34, :height => 34 do
+          stroke "#f00"
+          strokewidth 2
+          nofill
+          rect 0, 0, 34, 34
+          icon_button :arrow_right, "Next" do
+            lesson_set.next_page
+          end
         end
-        icon_button :menu, "Index", :left => 55 do
-          lesson_set.show_menu
-        end
-        icon_button :x, "Close", :right => 10 do
-          lesson_set.close_lesson
-        end
+        # icon_button :menu, "Index", :left => 100 do
+        #   lesson_set.show_menu
+        # end
+        # icon_button :x, "Close", :right => 10 do
+        #   lesson_set.close_lesson
+        # end
       end
     end
   end

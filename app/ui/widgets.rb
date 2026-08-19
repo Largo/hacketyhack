@@ -50,7 +50,15 @@ class IconButton < Shoes::Widget
       end
     end
 
-    click &blk
+    if ENV["HH_DEBUG_CLICKS"]
+      tt = @tooltip_text
+      click do |*a|
+        $stderr.puts "[HH_DEBUG_CLICKS] #{tt.inspect} button clicked, bounds: left=#{absolute_left} top=#{absolute_top} width=#{width} height=#{height}, app width=#{app.width} height=#{app.height}"
+        blk&.call(*a)
+      end
+    else
+      click &blk
+    end
   end
   
   def create_tooltip

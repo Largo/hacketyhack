@@ -318,29 +318,63 @@ class Shoes::Slot
     # Hover and leave arrive as app-global "the hover target changed" events
     # with no coordinates; the pointer's position decides whether this slot
     # was entered or left.
-    %i[hover leave].each do |event|
-      define_method(event) do |*args, &blk|
-        return super(*args, &blk) unless blk
+    #
+    # On Clogs, dispatch for these two event names is not actually
+    # symmetric for widgets composed of nested slots (e.g. IconButton, which
+    # wraps its glyph in an inner `stack`): hit-testing on hover/leave finds
+    # whichever nested child peer is topmost at the pointer -- often not the
+    # exact slot `hover`/`leave` were called on -- so the "leave"-named
+    # dispatch reliably lands on a slot with no `leave` block bound and is a
+    # silent no-op, even though the matching "hover" dispatch (fired for the
+    # same transition, same misdirected target-resolution) still ends up
+    # reaching real bound handlers app-wide. Concretely: leave callbacks
+    # registered the normal way never fire, which left every IconButton's
+    # hover tooltip and highlight stuck on permanently once shown (visible
+    # as several stuck/overlapping tooltips after hovering multiple icons).
+    #
+    # Rather than depend on the "leave" dispatch, register both the hover
+    # and leave blocks on the "hover" channel, which does fire reliably,
+    # and detect the falling edge ourselves from shared was-inside state.
+    # `hover` sets up the single "hover"-channel dispatch a slot needs, the
+    # first time either `hover` or `leave` is called on it (idempotent) --
+    # `leave` reuses it via `hover(&nil)` rather than registering its own.
+    # No code in this app calls a bare `.hover` with no block expecting a
+    # plain getter/no-op, so folding that case into the same setup path is
+    # safe here.
+    define_method(:hover) do |*args, &blk|
+      slot = self
+      slot.instance_variable_set(:@shoes3_positional_hover_blk, blk) if blk
+      return self if slot.instance_variable_get(:@shoes3_positional_wrapped)
 
-        slot = self
-        was_inside = false
-        super(*args) do |*cb_args|
-          peer = Shoes::Compat.display_peer(slot)
-          # Only Clogs' peers broadcast hover/leave app-wide and need a hit
-          # test reconstructed from the pointer's last known position;
-          # Scarpe's webview peers are backed by real DOM elements whose
-          # mouseenter/mouseleave are already scoped to themselves.
-          unless peer.respond_to?(:app)
-            blk.call(*cb_args)
-            next
-          end
-          _b, mx, my = peer.app&.mouse_state
-          inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
-          fire = event == :hover ? inside && !was_inside : !inside && was_inside
-          was_inside = inside
-          blk.call(*cb_args) if fire
+      slot.instance_variable_set(:@shoes3_positional_wrapped, true)
+      super(*args) do |*cb_args|
+        peer = Shoes::Compat.display_peer(slot)
+        unless peer.respond_to?(:app)
+          slot.instance_variable_get(:@shoes3_positional_hover_blk)&.call(*cb_args)
+          next
+        end
+        _b, mx, my = peer.app&.mouse_state
+        inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
+        was_inside = slot.instance_variable_get(:@shoes3_positional_inside) || false
+        slot.instance_variable_set(:@shoes3_positional_inside, inside)
+        if inside && !was_inside
+          slot.instance_variable_get(:@shoes3_positional_hover_blk)&.call(*cb_args)
+        elsif !inside && was_inside
+          slot.instance_variable_get(:@shoes3_positional_leave_blk)&.call(*cb_args)
         end
       end
+    end
+
+    define_method(:leave) do |*args, &blk|
+      return super(*args, &blk) unless blk
+
+      # Stash the block for `hover`'s wrapped closure to call on the falling
+      # edge; deliberately do NOT also register a "leave"-named dispatch --
+      # see the comment above for why that dispatch is a no-op. `hover(&nil)`
+      # just makes sure the shared "hover"-channel dispatch exists even if
+      # this slot never calls `hover` itself.
+      instance_variable_set(:@shoes3_positional_leave_blk, blk)
+      hover(&nil)
     end
   end
   prepend Shoes3PositionalEvents
