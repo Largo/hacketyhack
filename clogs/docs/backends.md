@@ -2,9 +2,14 @@
 
 Clogs paints the whole Shoes document itself and uses its display library for
 three things only: a window, a drawing surface and an event source. That
-boundary is narrow enough to write more than once, so it has been — against
-libui, FOX, wxWidgets, Qt, GTK3 and NAppGUI — and all six run the same
+boundary is narrow enough to write more than once, so it has been -- against
+libui, FOX, wxWidgets, Qt, GTK3 and NAppGUI -- and all six run the same
 programs, so they can be compared by measurement rather than by argument.
+
+There is a seventh, `wasm`, which is not a library at all: it is a browser
+canvas, reached from CRuby compiled to WebAssembly. It runs the same programs
+too. It is documented at the end, because almost nothing in the comparison
+below applies to it.
 
 ```
 CLOGS_BACKEND=libui   ruby hacketyhack.rb  # the default
@@ -14,6 +19,7 @@ CLOGS_BACKEND=qt      ruby hacketyhack.rb  # needs clogs/ext/qt/build.sh first
 CLOGS_BACKEND=gtk3    ruby hacketyhack.rb
 CLOGS_BACKEND=nappgui ruby hacketyhack.rb  # needs clogs/ext/nappgui/build.sh
 rake compare                               # the benchmark table below
+cd web && npm run serve                    # CLOGS_BACKEND=wasm, in a browser
 ```
 
 **Short answer: libui's weaknesses are libui's, not its stack's — and the
@@ -415,6 +421,88 @@ platform-specific — the key snooper is GTK, and Windows and macOS would each
 need their own answer to the same problem.
 
 So all five alternatives live behind opt-in, and libui stays the default.
+
+## The seventh one is not a library
+
+`CLOGS_BACKEND=wasm` puts the same Shoes document on an HTML canvas, with CRuby
+itself compiled to WebAssembly and running in the page. Everything above --
+what a toolkit exports, what it costs to link, whether it ships a binary --
+stops applying. What is left is the same narrow boundary: a window, a drawing
+surface, an event source.
+
+It is the easiest of the seven to write, because a canvas 2D context is the
+drawing model Clogs already had. Cairo's `move_to`, `curve_to`, `arc`, `clip`,
+`fill_preserve` and matrix stack are `moveTo`, `bezierCurveTo`, `arc`, `clip`,
+a path that survives its own fill, and `save`/`restore`. Nothing had to be
+approximated, worked around or emulated -- unlike libui, which cannot blit;
+FOX, which has no alpha; or NAppGUI, which cannot clip.
+
+**The one thing that is genuinely different is who owns the loop.** Every other
+backend blocks inside a native event loop and calls Ruby back. wasm runs on the
+browser's only thread, so a Ruby loop that does not return freezes the page it
+is painting into. So the ownership inverts: Lacci is told the display library's
+loop "returns" -- its own supported mode, the one Clogs already used for nested
+windows -- `Shoes.app` hands control straight back, and the page's
+`requestAnimationFrame` drives input, timers and frames from then on.
+
+That has a pleasant consequence. The frame clock is a parameter, not the wall
+clock, so a test can stop the page ticking and advance the app's own time by
+hand: `advance(1000)` is one second of every animation, `every`, and sleeping
+thread, identically on any machine. See [`web/README.md`](../../web/README.md).
+
+**And the boundary is expensive.** A call from wasm into JS costs about ten
+microseconds -- a thousand times a native function call -- and a frame of
+Hackety Hack is hundreds to thousands of drawing operations. Drawing op by op
+would spend more time crossing the boundary than the browser spends painting.
+So this backend does not draw immediately: `Painter` appends to a flat array of
+numbers, handed over once per frame and replayed by `web/host.js`. Input goes
+the same way, batched into one call per frame. Two crossings a frame, not
+thousands.
+
+### What it costs
+
+The same benchmark programs `rake compare` runs, loaded in the browser, timing
+the same thing -- `Clogs::App#on_draw`, the document paint:
+
+| page | libui | fox | qt | gtk3 | nappgui | wasm |
+|---|---|---|---|---|---|---|
+| no image (control) | 0.98 ms | **0.34 ms** | 0.69 ms | 0.67 ms | 0.62 ms | 0.30 ms |
+| 16x16 icon | 1.40 ms | 0.22 ms | 0.49 ms | 0.45 ms | 0.39 ms | 0.30 ms |
+| 500x616 art | 8.77 ms | **0.20 ms** | 0.73 ms | 1.10 ms | 1.17 ms | 0.30 ms |
+| 256x256 art with alpha | 18.75 ms | **0.19 ms** | 0.59 ms | 0.54 ms | 0.57 ms | 0.30 ms |
+| 40 styled paragraphs | 50.87 ms | **9.11 ms** | 14.24 ms | 34.90 ms | 16.80 ms | 22.90 ms |
+
+Read that column carefully, because it is measuring something slightly
+different from the others even though the code is identical. Emitting a
+`drawImage` op is five numbers whatever the picture is, and the browser's own
+blit happens afterwards, during replay -- which is why the image rows are flat,
+and why the whole frame including serialising and replaying still lands at
+0.3-0.4 ms. Text is the honest row: 5,787 ops for forty styled paragraphs, all
+of them built in Ruby, on a Ruby that is several times slower than the native
+one. It still beats libui, wx and gtk3, because what it is not doing is
+crossing a boundary per operation.
+
+Hackety Hack's own splash screen is 774 ops, 4.7 ms to build and 6.2 ms to put
+on the canvas.
+
+### What it gives up
+
+- **Sockets.** There are none in a browser. `net/http` is shimmed to raise the
+  `SocketError` an offline machine raises.
+- **File pickers.** `ask_open_file` and friends return nil: a page cannot wait
+  for a picker synchronously, and Shoes' API is synchronous. `alert`, `confirm`
+  and `ask` are fine -- `window.alert` and friends really do block.
+- **Preemptive threads.** wasm CRuby has none, so `Thread.new` becomes a Fiber
+  scheduled between frames, with `sleep` and `Queue#pop` yielding to the
+  scheduler. Shoes programs use threads to keep a window alive while something
+  runs, which this does; they do not use them for parallelism, which it cannot.
+- **Reading the system clipboard.** `navigator.clipboard.readText` is
+  asynchronous and permission-gated. Copying and pasting within a Shoes program
+  works; pasting from another application does not.
+- **C extensions.** Hackety Hack wants sqlite3 and nokogiri. sqlite3 is
+  replaced by a key/value shim over localStorage, which is all HH::Database
+  uses it for; nokogiri is replaced by a stub, because everything reaching for
+  it is one of the hackety.org features that has had no server since 2013.
 
 ## Verdict
 

@@ -46,8 +46,8 @@ rake boot              # IDE smoke test
 rake compare           # time a frame on every Clogs backend
 ```
 
-Clogs has five interchangeable display backends: libui (the default), FOX via
-FXRuby, wxWidgets via wxRuby3, Qt through a small C shim this repo carries
+Clogs has six interchangeable native display backends: libui (the default), FOX
+via FXRuby, wxWidgets via wxRuby3, Qt through a small C shim this repo carries
 (Ruby has no maintained Qt binding), GTK3 via ruby-gnome, and NAppGUI through a
 second shim. All six boot the IDE and pass the same 11 of the 12 samples. They differ in what a frame costs,
 mostly because libui cannot blit a bitmap and has to paint pictures as
@@ -94,10 +94,45 @@ Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 Hpricot, which has not built since 2010, is replaced by a Nokogiri shim, and
 the dead hackety.org version check no longer crashes startup.
 
-**Still rough.** The editor tab is not usable yet and the online features point
-at a server that no longer exists. Large images are expensive to draw on the
+**Still rough.** The editor tab takes typed text but deletes only one character
+-- a second backspace does nothing -- and the online features point at a server
+that no longer exists. Large images are expensive to draw on the
 default backend — see the note on libui and bitmaps in the coverage matrix, and
 `CLOGS_BACKEND=wx` for the version of Clogs that does not have that problem.
+
+## In a browser
+
+There is a seventh backend, and it is not a library: `CLOGS_BACKEND=wasm` paints
+the same Shoes document onto an HTML canvas, with CRuby itself compiled to
+WebAssembly and running in the page.
+
+```
+cd web
+npm install
+npm run serve      # http://localhost:4173 -- the IDE
+npm test           # 28 Playwright tests
+```
+
+The app is not ported. `app/`, `lib/`, `samples/` and `lessons/` are shipped
+byte for byte into a filesystem the browser holds in memory, so a bug you find
+in the browser is the bug the desktop app has -- which is the point. Clogs
+paints everything into one canvas, so there is nothing for Playwright to
+select; the page exposes the drawable tree instead, and the frame clock, so a
+test reads the words on screen, clicks them by name, and advances the app's own
+time rather than racing it:
+
+```js
+const app = await bootIDE(page);
+await app.clickText("Samples");
+await app.advance(500);
+expect(await app.texts()).toContain("Clock");
+```
+
+The IDE boots, the side tabs work, the editor takes typed text, and eleven of
+the twelve samples run -- the same eleven as every native backend. See
+[`web/README.md`](web/README.md) for the harness and
+[`clogs/docs/backends.md`](clogs/docs/backends.md#the-seventh-one-is-not-a-library)
+for what a browser gives up (sockets, file pickers, preemptive threads).
 
 ## Development
 
@@ -131,6 +166,10 @@ CLOGS_BACKEND=nappgui rake samples
 
 rake compare                                                 # all six, timed
 SHOT_DIR=tmp/shots CLOGS_BACKEND=qt ruby -Iclogs/lib -I. tools/screenshots.rb
+
+cd web && npm install                                        # the browser build
+npm run serve                                                # needs no toolkit at all
+npm test
 ```
 
 On a headless machine, prefix GUI commands with `xvfb-run -a`.

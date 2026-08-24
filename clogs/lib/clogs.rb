@@ -21,9 +21,12 @@ module Clogs
   # price of a much larger dependency, qt has both but has to carry its own C
   # shim because Ruby has no maintained Qt binding at all, gtk3 is the library
   # libui itself draws through on Linux reached without the wrapper, and
-  # nappgui is the smallest of the lot -- and the only one with no clipping.
+  # nappgui is the smallest of the lot -- and the only one with no clipping,
+  # and wasm is not a native library at all: it is a browser canvas, reached
+  # from CRuby compiled to WebAssembly, so the same Shoes program runs in a
+  # page and can be driven by a browser automation harness.
   # Select one with CLOGS_BACKEND; docs/backends.md has what each trade costs.
-  BACKENDS = %w[libui fox wx qt gtk3 nappgui].freeze
+  BACKENDS = %w[libui fox wx qt gtk3 nappgui wasm].freeze
   DEFAULT_BACKEND = "libui"
 
   def self.backend
@@ -59,6 +62,10 @@ module Clogs
 
   def self.nappgui?
     backend == "nappgui"
+  end
+
+  def self.wasm?
+    backend == "wasm"
   end
 end
 
@@ -103,6 +110,7 @@ module Clogs
     # libui takes a font *family* name and resolves it per platform.
     def default_font_family
       @default_font_family ||= case RUBY_PLATFORM
+      when /wasm/ then "sans-serif"
       when /darwin/ then "Helvetica"
       when /mingw|mswin/ then "Segoe UI"
       else "Sans"
@@ -119,6 +127,7 @@ module Clogs
 
     def monospace_font_family
       @monospace_font_family ||= case RUBY_PLATFORM
+      when /wasm/ then "monospace"
       when /darwin/ then "Monaco"
       when /mingw|mswin/ then "Consolas"
       else "Monospace"

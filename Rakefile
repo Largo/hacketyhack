@@ -283,3 +283,24 @@ KNOWN_SAMPLE_FAILURES = [
 ].freeze
 
 task default: [:samples, :boot]
+
+# The browser build. Everything it needs lives in web/, including its own
+# node_modules; these are here so `rake -T` mentions it at all.
+namespace :web do
+  desc "Build the browser bundle (web/dist)"
+  task :build do
+    sh "npm", "install", "--prefix", "web" unless File.directory?("web/node_modules")
+    sh "node", "web/build.mjs"
+  end
+
+  desc "Run Hackety Hack in a browser (http://localhost:4173)"
+  task serve: :build do
+    sh "node", "web/serve.mjs"
+  end
+
+  desc "Run the Playwright suite against the browser build"
+  task :test do
+    sh "npm", "install", "--prefix", "web" unless File.directory?("web/node_modules")
+    sh "npx", "--prefix", "web", "playwright", "test", chdir: "web"
+  end
+end
