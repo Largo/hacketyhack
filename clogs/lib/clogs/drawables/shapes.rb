@@ -202,19 +202,56 @@ module Clogs
 
   # `shape { move_to ...; line_to ... }` -- Shoes records the commands and the
   # display service replays them.
+  #
+  # A Shape is two things at once, because Lacci makes it two things. The part
+  # of the shape DSL Lacci implements -- move_to, line_to, curve_to -- is
+  # recorded as `shape_commands` and replayed here as one path. But an *art
+  # drawable* written inside the block (`shape { arc ... }`, an oval, a star)
+  # becomes a real drawable parented to the Shape, because Lacci's Shape is a
+  # Shoes::Slot; its own source calls that "wrong, but not *too* wrong". Clogs
+  # had only the first half, so a shape whose whole body was arcs -- which is
+  # the whole of samples/Arcs.rb -- measured 0x0 and never painted one.
+  #
+  # The contents are laid out the way a slot lays out its positioned children,
+  # because that is what they are: art drawables always carry their own left
+  # and top.
   class Shape < ArtDrawable
-    def measure(_available_width, _available_height = nil)
+    def contents
+      @children.reject(&:hidden?)
+    end
+
+    def measure(available_width, available_height = nil)
+      height_avail = available_height || available_width
+      contents.each do |child|
+        child.measure(available_width, height_avail)
+        child.x = Style.position(child.style(:left), available_width) || 0
+        child.y = Style.position(child.style(:top), height_avail) || 0
+      end
+
       xs = []
       ys = []
       Array(style(:shape_commands)).each do |cmd|
         _name, *args = cmd
         args.each_slice(2) { |px, py| xs << px.to_f; ys << py.to_f if py }
       end
+      contents.each do |child|
+        xs << child.x + child.width
+        ys << child.y + child.height
+      end
+
       @width = xs.empty? ? 0 : xs.max.ceil
       @height = ys.empty? ? 0 : ys.max.ceil
     end
 
+    # The recorded path first, then whatever was declared inside the block --
+    # both under the Shape's own draw context and rotation, which is the point
+    # of writing them inside a shape at all.
     def draw(painter, x, y)
+      draw_commands(painter, x, y)
+      contents.each { |child| child.paint(painter, x, y) }
+    end
+
+    def draw_commands(painter, x, y)
       painter.draw(fill: fill_paint, stroke: stroke_paint, thickness: strokewidth) do |p|
         started = false
         Array(style(:shape_commands)).each do |cmd|

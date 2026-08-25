@@ -238,9 +238,16 @@ class Shoes::Para
   shoes_styles :marker unless shoes_style_name?(:marker)
 
   def cursor=(position)
-    # `cursor = :marker` collapses the selection: caret moves to the marker,
-    # or stays put when no marker is set.
-    position = marker || text_cursor if position == :marker
+    # `cursor = :marker` collapses the selection: the caret moves to the
+    # marker, or stays put when no marker is set, and either way the
+    # selection is over -- so the marker has to go with it. Leaving it set
+    # is what made a second backspace do nothing: the editor skips setting
+    # a marker when one is already there, so `highlight` came back as a
+    # zero-length range at the caret and it deleted zero characters.
+    if position == :marker
+      position = marker || text_cursor
+      self.marker = nil
+    end
     self.text_cursor = position
   end unless method_defined?(:cursor=)
 

@@ -74,6 +74,13 @@ animation, `clear`/redraw, mouse input, art drawables, turtle widgets and
 styled text. `rake samples` names the twelfth rather than hiding it:
 `Guessing Game` is a bare `ask` loop with nobody headless to answer it.
 
+Three of them only started *drawing* once the browser build made it easy to
+look: `animate { clear { ... } }` — how every Shoes animation is written —
+destroyed the subscription driving it, so `Clock`, `Arcs` and
+`Animated Flowers` each painted one frame and froze; and a `shape { arc ... }`
+never drew what was inside it. Both were fixed in Clogs, and both were fixed on
+every backend at once.
+
 Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 `lib/compat/shoes3.rb`:
 
@@ -94,9 +101,9 @@ Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 Hpricot, which has not built since 2010, is replaced by a Nokogiri shim, and
 the dead hackety.org version check no longer crashes startup.
 
-**Still rough.** The editor tab takes typed text but deletes only one character
--- a second backspace does nothing -- and the online features point at a server
-that no longer exists. Large images are expensive to draw on the
+**Still rough.** The editor tab takes text now -- typing, backspace, newlines,
+and the Save button appearing when there is something to save -- but it is not
+finished, and the online features point at a server that no longer exists. Large images are expensive to draw on the
 default backend — see the note on libui and bitmaps in the coverage matrix, and
 `CLOGS_BACKEND=wx` for the version of Clogs that does not have that problem.
 
@@ -110,7 +117,7 @@ WebAssembly and running in the page.
 cd web
 npm install
 npm run serve      # http://localhost:4173 -- the IDE
-npm test           # 28 Playwright tests
+npm test           # 30 Playwright tests
 ```
 
 The app is not ported. `app/`, `lib/`, `samples/` and `lessons/` are shipped

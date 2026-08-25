@@ -5,12 +5,17 @@ import { bootApp } from "./helpers.mjs";
 // backends. Eleven open a window; Guessing Game is a bare ask/alert loop with
 // no Shoes.app in it at all, which is why the native suite holds it out.
 //
-// `paints` says whether the sample puts anything on the canvas by itself. Three
-// do not, and none of that is new here -- see the test below, which pins the
-// two that are actually broken so that fixing them is noticed.
+// `paints` says whether the sample puts anything on the canvas by itself. Only
+// Scribble does not, and it is right not to: it draws where the mouse is
+// dragged and there is nothing else to it.
 const SAMPLES = [
-  { name: "Animated Flowers", paints: false },
-  { name: "Arcs", paints: false },
+  // Animated Flowers fades its circles in from fully transparent, a step every
+  // tenth frame, so it needs a moment before there is anything to see. The
+  // rest draw on their first frame, and running an animation for longer than
+  // the test needs is real work -- Follow rebuilds sixty ovals sixty times a
+  // second.
+  { name: "Animated Flowers", paints: true, warmupMs: 600 },
+  { name: "Arcs", paints: true },
   { name: "Clock", paints: true },
   { name: "Duel", paints: true },
   { name: "Follow", paints: true },
@@ -35,12 +40,12 @@ function countColours(page) {
 }
 
 test.describe("the bundled samples", () => {
-  for (const { name, paints } of SAMPLES) {
+  for (const { name, paints, warmupMs = 200 } of SAMPLES) {
     test(`${name} runs`, async ({ page }) => {
       // Funnies fetches a comic from a host that has not answered in years;
       // Clogs logs the failure and carries on, which is what it does natively
       // on a machine with no network.
-      const app = await bootApp(page, { entry: `/hh/samples/${name}.rb` });
+      const app = await bootApp(page, { entry: `/hh/samples/${name}.rb`, warmupMs });
 
       const windows = await app.windows();
       expect(windows.length).toBeGreaterThanOrEqual(1);
@@ -75,7 +80,7 @@ test.describe("the bundled samples", () => {
   });
 });
 
-test.describe("samples that draw nothing", () => {
+test.describe("mouse-driven drawing", () => {
   test("Scribble is blank until something is scribbled on it", async ({ page }) => {
     const app = await bootApp(page, { entry: "/hh/samples/Scribble.rb" });
     expect(await countColours(page)).toBe(1);
@@ -87,18 +92,29 @@ test.describe("samples that draw nothing", () => {
 
     expect(await countColours(page), "dragging drew nothing").toBeGreaterThan(1);
   });
+});
 
-  test("Arcs and Animated Flowers still paint only their background", async ({ page }) => {
-    // Neither draws anything on any Clogs backend: their shapes are laid out
-    // 0x0 (Arcs) or reach the painter with no fill and no stroke (Animated
-    // Flowers), identically under libui. This pins that so a fix is noticed --
-    // if this test starts failing, the sample works and `paints` above should
-    // change to true.
-    for (const name of ["Arcs", "Animated Flowers"]) {
-      const app = await bootApp(page, { entry: `/hh/samples/${name}.rb` });
-      expect(await countColours(page), `${name} now draws something`).toBe(1);
-      void app;
+test.describe("shapes", () => {
+  test("a shape draws the art drawables written inside it", async ({ page }) => {
+    // Lacci models `shape { arc ... }` as a slot holding an Arc drawable
+    // rather than as a path command, and Clogs used to draw only the recorded
+    // commands -- so samples/Arcs.rb, which is ten shapes of one arc each,
+    // measured 0x0 and painted nothing but its background.
+    const app = await bootApp(page, { entry: "/hh/samples/Arcs.rb" });
+
+    const shapes = await app.find("Shape");
+    expect(shapes.length).toBeGreaterThanOrEqual(10);
+    for (const shape of shapes) {
+      expect(shape.width, "a shape sized itself to nothing").toBeGreaterThan(0);
+      expect(shape.height).toBeGreaterThan(0);
     }
+
+    // And the arcs inside them are laid out, not left unmeasured.
+    const arcs = await app.find("Arc");
+    expect(arcs.length).toBeGreaterThanOrEqual(10);
+    expect(arcs.every((arc) => arc.width > 0)).toBe(true);
+
+    expect(await countColours(page)).toBeGreaterThan(1);
   });
 });
 
@@ -117,26 +133,48 @@ test.describe("animation", () => {
     expect(await page.evaluate(() => window.clogs.framesPainted())).toBeGreaterThan(before);
   });
 
-  test("`clear` inside `animate` stops the animation after one frame", async ({ page }) => {
-    // A real Clogs bug, and not one this backend introduced: `animate` is a
-    // drawable in the document like any other, so a block that redraws by
-    // calling `clear` destroys its own subscription. Clock, whose whole
-    // program is `animate { clear { ... } }`, therefore draws one frame and
-    // freezes -- identically under libui, where the subscription is likewise
-    // gone from the tree a few seconds in.
-    //
-    // When this is fixed, this test fails and Clock's clock starts ticking.
+  test("an animation survives redrawing itself with `clear`", async ({ page }) => {
+    // `animate { clear { ... } }` is how Shoes animations have always been
+    // written, and `animate` is a drawable in the document like any other --
+    // so clearing the slot used to destroy the very subscription driving it,
+    // and Clock drew one frame and froze.
     const app = await bootApp(page, { entry: "/hh/samples/Clock.rb" });
-    await app.advance(3000);
 
-    const subscriptions = await app.ruby(`
+    const subscriptions = () => app.ruby(`
       count = 0
       Clogs::App.instances.first.document_root.each_peer do |peer|
         count += 1 if peer.is_a?(Clogs::SubscriptionItem)
       end
       count.to_s
     `);
-    expect(Number(subscriptions), "animate now survives its own clear -- this bug is fixed").toBe(0);
+    expect(Number(await subscriptions())).toBe(1);
+
+    const before = await page.evaluate(() => window.clogs.framesPainted());
+    await app.advance(3000);
+
+    expect(Number(await subscriptions()), "the animation was cleared away").toBe(1);
+    expect(await page.evaluate(() => window.clogs.framesPainted())).toBeGreaterThan(before + 5);
+  });
+
+  test("rebuilding the document every frame does not get slower each frame", async ({ page }) => {
+    // Every drawable subscribes to six events, and nothing used to take those
+    // subscriptions back off: a destroyed slot left its children alive, and an
+    // emptied handler list was left in a table that is scanned in full on
+    // every unsubscribe. Arcs rebuilds twenty-one drawables forty times a
+    // second, so the tenth second of animation cost six times the first.
+    const app = await bootApp(page, { entry: "/hh/samples/Arcs.rb", warmupMs: 500 });
+
+    const subscriptions = () => page.evaluate(() => Number(window.__clogsVM.eval(`
+      handlers = Shoes::DisplayService.class_variable_get(:@@display_event_handlers)
+      handlers.values.sum { |targets| targets.values.sum(&:size) }.to_s
+    `).toString()));
+
+    const before = await subscriptions();
+    await app.advance(1500);
+    const after = await subscriptions();
+
+    // Flat, not merely slower-growing: the document is the same size each frame.
+    expect(after, `subscriptions grew from ${before} to ${after}`).toBeLessThanOrEqual(before + 10);
   });
 
   test("a green thread keeps running across frames", async ({ page }) => {

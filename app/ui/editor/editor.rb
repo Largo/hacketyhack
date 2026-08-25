@@ -253,7 +253,13 @@ class HH::SideTabs::Editor < HH::SideTab
   end
 
   def update_time
-    every 20 do
+    # Opening a program reruns this inside `clear { draw_content script }`, and
+    # clearing a slot does not stop an animation any more than it does in
+    # Shoes -- HH::SideTabs::Prefs stops its own for exactly this reason.
+    # Without stopping the last one, every program opened would leave another
+    # timer behind, writing to a label that is no longer on screen.
+    @time_updater&.stop
+    @time_updater = every 20 do
       @stale.text = "Last saved #{@code_editor.last_saved.since} ago." if @code_editor.last_saved
     end
   end
@@ -335,7 +341,11 @@ class HH::SideTabs::Editor < HH::SideTab
   end
 
   def on_keypress
-    keypress do |k|
+    # Like update_time: opening a program reruns this inside a `clear`, which
+    # does not stop a subscription. Left alone, the second program opened
+    # would handle every keystroke twice, the third three times.
+    @keypress_handler&.stop
+    @keypress_handler = keypress do |k|
       onkey(k)
       if @code_para.cursor_top < @scroll.scroll_top
         @scroll.scroll_top = @code_para.cursor_top

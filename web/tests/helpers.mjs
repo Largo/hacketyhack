@@ -23,7 +23,18 @@ const HARMLESS = [
 // tests come from. Paused, nothing happens between assertions except what the
 // test asks for, and `advance(ms)` delivers exactly that much of the app's own
 // time. Pass `paused: false` to watch it run instead.
-export async function bootApp(page, { entry = null, timeout = 120_000, paused = true, warmupMs = 3000 } = {}) {
+//
+// `warmupMs` is how much of the app's own time to run before handing it over.
+export async function bootApp(page, {
+  entry = null,
+  timeout = 120_000,
+  paused = true,
+  // The IDE opens on a timed splash sequence and needs it run through. A
+  // program you name has nothing to wait for but its first frame -- and since
+  // animations really do animate, warming up longer than necessary is real
+  // work: Follow rebuilds sixty ovals sixty times a second.
+  warmupMs = entry ? 600 : 3000,
+} = {}) {
   const consoleErrors = [];
   page.on("console", (message) => {
     const text = message.text();
@@ -117,7 +128,7 @@ export async function bootApp(page, { entry = null, timeout = 120_000, paused = 
     // Turn the frame clock until nothing repaints. An animating app never
     // stops repainting, so this reports rather than throwing -- assert on
     // `settled` only when the app is meant to be at rest.
-    settle: (maxTicks = 60) => page.evaluate((n) => window.clogs.settle(n), maxTicks),
+    settle: (maxTicks = 12) => page.evaluate((n) => window.clogs.settle(n), maxTicks),
 
     // Run `ms` of the app's own time. Timers, `animate`, `every` and any
     // sleeping green thread all move by exactly this much.
@@ -151,7 +162,7 @@ export async function bootApp(page, { entry = null, timeout = 120_000, paused = 
   // Hackety Hack opens on a timed splash sequence; the first thing almost any
   // test needs is for that to have finished.
   await app.advance(warmupMs);
-  await app.settle();
+  await app.settle(5);
   return app;
 }
 

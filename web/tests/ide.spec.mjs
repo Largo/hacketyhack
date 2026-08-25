@@ -104,14 +104,42 @@ test.describe("the editor", () => {
     expect(await app.texts()).toContain("abc");
   });
 
-  test("a second backspace does nothing -- the editor only deletes once", async ({ page }) => {
-    // A real bug in Hackety Hack's editor, not in the way the browser
-    // delivers keys: dispatching the same `keypress` event straight from Ruby,
-    // which is exactly what the native backends do, deletes nothing either,
-    // while typing an ordinary character still works. So the editor is losing
-    // something about its own state after one delete.
-    //
-    // When this is fixed, this test fails -- change it to assert "ab".
+  test("reopening a program does not stack up its subscriptions", async ({ page }) => {
+    // The editor rebuilds itself with `clear { draw_content script }` every
+    // time a program is opened, and clearing a slot does not stop an
+    // animation or a keypress handler -- it never did in Shoes either, which
+    // is why HH::SideTabs::Prefs stops its own before clearing. Without the
+    // same discipline here the second program opened would handle every
+    // keystroke twice, and every open would leave another timer running.
+    const app = await bootIDE(page);
+    await clickSidebar(app, 1);
+
+    const subscriptions = () => app.ruby(`
+      counts = Hash.new(0)
+      Clogs::App.instances.first.document_root.each_peer do |peer|
+        counts[peer.api_name] += 1 if peer.is_a?(Clogs::SubscriptionItem)
+      end
+      counts.sort.map { |name, count| "#{name}=#{count}" }.join(" ")
+    `);
+
+    const before = await subscriptions();
+    expect(before).toContain("keypress=1");
+    expect(before).toContain("every=1");
+
+    for (let i = 0; i < 3; i++) {
+      await app.ruby(`HH::APP.gettab(:Editor).load({}); "ok"`);
+      await app.advance(400);
+    }
+
+    expect(await subscriptions(), "subscriptions accumulated across opens").toBe(before);
+  });
+
+  test("backspace keeps deleting, and typing resumes after it", async ({ page }) => {
+    // `para.cursor = :marker` is how the editor collapses a selection after
+    // an edit, and it used to move the caret without clearing the marker.
+    // The editor skips setting a marker when one is already there, so every
+    // backspace after the first asked to delete a zero-length range and
+    // silently did nothing.
     const app = await bootIDE(page);
     await clickSidebar(app, 1);
 
@@ -119,15 +147,15 @@ test.describe("the editor", () => {
     await app.type("abcd");
     await app.advance(300);
 
-    await app.key("Backspace");
-    await app.advance(200);
-    await app.key("Backspace");
-    await app.advance(200);
-    expect(await app.texts(), "backspace repeats now -- this bug is fixed").toContain("abc");
+    for (const expected of ["abc", "ab", "a"]) {
+      await app.key("Backspace");
+      await app.advance(200);
+      expect(await app.texts()).toContain(expected);
+    }
 
-    // Typing still lands, so it is delete specifically that is stuck.
-    await app.type("z");
+    // And the caret is where the deletions left it, not back at the marker.
+    await app.type("XY");
     await app.advance(200);
-    expect(await app.texts()).toContain("abcz");
+    expect(await app.texts()).toContain("aXY");
   });
 });

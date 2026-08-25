@@ -24,6 +24,92 @@ module Clogs
 end
 Shoes::SubscriptionItem.prepend(Clogs::SubscriptionItemSingleBind)
 
+# Shoes' `clear` empties a slot of its *contents*. In Lacci an `animate`,
+# `every` or `timer` is a Shoes::SubscriptionItem parented to the slot like any
+# other drawable -- so a program that redraws itself with
+#
+#     animate(24) { clear { ... } }
+#
+# which is how Shoes animations have been written since Shoes 3, destroys the
+# subscription that is calling it and stops dead after one frame. samples/Clock
+# and samples/Arcs are both exactly that, and both drew a single frame.
+#
+# Subscriptions are not contents: in Shoes 3 an animation belonged to the app
+# and was ended with `stop`, not by clearing the slot it happened to be written
+# in. So they survive a clear, and everything else still goes.
+class Shoes::Slot
+  unless method_defined?(:__clogs_clear_all_children)
+    alias_method :__clogs_clear_all_children, :clear
+
+    def clear(&block)
+      @children ||= []
+      @children.dup.each do |child|
+        child.destroy unless child.is_a?(Shoes::SubscriptionItem)
+      end
+      append(&block) if block_given?
+      nil
+    end
+  end
+end
+
+# Destroying a slot has to destroy what is inside it. Lacci's Drawable#destroy
+# unhooks only the drawable it is called on -- it removes itself from its
+# parent, drops its subscriptions and unregisters its id, but never touches its
+# own children. So clearing a slot that contains slots leaves every nested
+# drawable alive: still registered, still subscribed to hover, leave, motion,
+# parent, prop_change and destroy, and now unreachable.
+#
+# Nothing noticed while animations stopped after one frame. Once they run,
+# `samples/Arcs.rb` -- ten `shape { arc ... }`, rebuilt forty times a second --
+# orphaned ten arcs and sixty subscriptions per frame, and since Lacci finds a
+# subscription to remove by scanning every subscription it holds, each frame
+# cost more than the last: a second of animation took 2.5 seconds of work, then
+# 7, then 15.
+class Shoes::Slot
+  unless method_defined?(:__clogs_destroy_without_children)
+    alias_method :__clogs_destroy_without_children, :destroy
+
+    def destroy
+      @children&.dup&.each do |child|
+        child.destroy unless child.instance_variable_get(:@destroyed)
+      end
+      __clogs_destroy_without_children
+    end
+  end
+end
+
+# Lacci finds a subscription to cancel by scanning every subscription it holds
+# -- there is no index from an unsubscribe id back to where it lives -- and
+# when it empties a handler list it leaves the now-empty entry in place. The
+# table therefore only ever grows: one dead entry per drawable that ever
+# existed, per event it subscribed to, all of them walked again on the next
+# unsubscribe.
+#
+# A program that rebuilds its document every frame unsubscribes hundreds of
+# times a second, so that is quadratic in the number of frames. Arcs still slid
+# from 4.8 to 14.8 seconds of work per second of animation with the leak above
+# already fixed. Dropping the empty entries as they are found keeps the table
+# proportional to what is actually subscribed. Both halves are safe: Lacci
+# re-creates the entries with `||=` when subscribing, and reads them with
+# `.compact` when dispatching.
+module Clogs
+  module PruneEmptySubscriptions
+    def unsub_from_events(unsub_id)
+      raise "Must provide an unsubscribe ID!" if unsub_id.nil?
+      return unless Shoes::DisplayService.class_variable_defined?(:@@display_event_handlers)
+
+      Shoes::DisplayService.class_variable_get(:@@display_event_handlers).each_value do |target_hash|
+        target_hash.delete_if do |_target, handlers|
+          handlers.delete_if { |handler| handler[:unsub_id] == unsub_id }
+          handlers.empty?
+        end
+      end
+      nil
+    end
+  end
+end
+Shoes::DisplayService.singleton_class.prepend(Clogs::PruneEmptySubscriptions)
+
 # Shoes lets you click a slot, but Lacci declares no `click` style for one, so
 # nothing tells the display side which slots want a click and which are merely
 # in the way. Clogs::Slot#clickable? reads exactly this style: without it every

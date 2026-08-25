@@ -327,8 +327,11 @@
     clock() { return clock; },
 
     // Tick until nothing repaints, or until the budget runs out. An animating
-    // app never settles, which is why this reports rather than throws.
-    settle(maxTicks = 60) {
+    // app never settles, which is why this reports rather than throws -- and
+    // why the budget is small: a resting app stops on the first or second
+    // tick, and for one that never rests every remaining tick is a frame of
+    // real work spent finding that out again.
+    settle(maxTicks = 12) {
       for (let i = 0; i < maxTicks; i++) {
         if (this.tick(1) === 0) return { settled: true, ticks: i + 1 };
       }
