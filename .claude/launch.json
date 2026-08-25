@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hacketyhack-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd web && npm run serve"],
+      "port": 4173
+    }
+  ]
+}
