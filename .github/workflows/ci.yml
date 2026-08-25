@@ -165,7 +165,12 @@ jobs:
           gem_dir=$(bundle show wxruby3)
           sed -i 's|@ld          = wx_config("--ld")|@ld          = wx_config("--ld").sub(/\\s+-o\\s*\\z/, "")|' \
             "$gem_dir/rakelib/lib/config/unixish.rb"
-          (cd "$gem_dir" && rake -m wxruby:gem:setup)
+          # wxruby:gem:setup wants a build configuration to already exist and
+          # only says so by failing. `configure` writes it -- and deliberately
+          # exits when it is done, so it cannot share a rake invocation with
+          # the build. It needs no arguments here: wxRuby3 defaults to the
+          # system wxWidgets, which is what the apt step above installed.
+          (cd "$gem_dir" && rake configure && rake -m wxruby:gem:setup)
 
       - name: Run the bundled Shoes samples on wx
         env:
@@ -281,11 +286,14 @@ jobs:
       # this backend drives its own C shim through Fiddle -- but for a
       # different reason: NAppGUI's osmain macro wants to own main(). See
       # clogs/docs/backends.md.
+      # libglu1-mesa-dev is for GL/glu.h: NAppGUI builds its ogl3d module
+      # unconditionally, and that header is not part of the Mesa runtime the
+      # runner already has.
       - name: Install NAppGUI's build dependencies and a virtual display
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libcurl4-openssl-dev cmake \
-                                  xvfb xauth
+                                  libglu1-mesa-dev xvfb xauth
 
       - name: Build NAppGUI from source
         run: |
