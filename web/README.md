@@ -12,9 +12,15 @@ FOX, wx and NAppGUI. A bug you find here is the bug the desktop app has.
 
 ```
 npm install                # once
+bundle install             # once, for web/Gemfile (the gems packed into wasm)
 npm run serve              # http://localhost:4173
 npm test                   # the Playwright suite
 ```
+
+CI runs the same suite on every push and pull request — the `wasm` job in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml). On failure it
+uploads the Playwright report and traces, which is worth having when the whole
+UI is one canvas.
 
 `npm run serve` rebuilds the bundle first. After changing any Ruby that the
 browser loads, re-run `npm run build` (or just `npm run serve` again) — the
@@ -86,6 +92,15 @@ await app.ruby(`Clogs::App.instances.first.document_root.children.size.to_s`);
 | `vfs.mjs` | the bundle format, shared by the builder and the page |
 | `serve.mjs` | a static server, with the CRuby binary mapped in from `node_modules` |
 | `shims/` | the C extensions wasm cannot have: sqlite3, nokogiri, net/http, openssl |
+| `Gemfile` | the three pure-Ruby gems packed into the wasm filesystem, pinned |
+
+`web/Gemfile` is separate from the repo's own on purpose, and the comment in it
+says why: the repo takes Scarpe from git for the webview backend, and Scarpe's
+repo is a monorepo carrying Lacci's gemspec, so Bundler resolves Lacci from git
+for the whole project too. That is a different Shoes from the released 0.5.0
+Hackety Hack's compatibility layer is written against, and this suite is what
+found the difference — on git main the IDE's side tabs stop opening. So the
+browser states which Shoes it runs instead of inheriting it.
 
 Ruby and the page talk exactly twice per frame — input and the clock in, one
 command buffer out — because a call across the wasm boundary costs about ten

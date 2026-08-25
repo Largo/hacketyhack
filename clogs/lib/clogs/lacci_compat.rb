@@ -65,8 +65,15 @@ end
 # subscription to remove by scanning every subscription it holds, each frame
 # cost more than the last: a second of animation took 2.5 seconds of work, then
 # 7, then 15.
-class Shoes::Slot
-  unless method_defined?(:__clogs_destroy_without_children)
+#
+# Lacci's own main has since grown this same cascade (scarpe-team/scarpe
+# 586c603, "Fix Slot#destroy to cascade to children"), reached here through
+# the fork the Gemfile points at -- so, like every other shim in this file,
+# this one steps aside when the installed Lacci already does the job.
+# Released lacci 0.5.0 does not define Slot#destroy at all; the version that
+# cascades defines it precisely to do so.
+if Shoes::Slot.instance_method(:destroy).owner != Shoes::Slot
+  class Shoes::Slot
     alias_method :__clogs_destroy_without_children, :destroy
 
     def destroy

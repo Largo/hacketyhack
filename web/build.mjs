@@ -17,13 +17,21 @@ const DIST = path.join(WEB, "dist");
 
 // Where the gems live on this machine. Lacci and scarpe-components are pure
 // Ruby, so they travel into wasm unchanged; nothing else in the Gemfile does.
-function gemPath(name) {
-  const out = execFileSync("ruby", ["-e", `
-    require "rubygems"
-    spec = Gem::Specification.find_by_name(${JSON.stringify(name)})
-    print spec.full_gem_path
-  `], { encoding: "utf8" });
-  return out.trim();
+//
+// Resolved through web/Gemfile rather than the repo's own, and through Bundler
+// rather than the ambient gem list. See web/Gemfile for why the browser pins
+// its own Lacci; using Bundler is what makes that pin mean anything, and what
+// makes this work on a machine that has only ever run `bundle install`.
+function gemPaths(names) {
+  const script = `print ${JSON.stringify(names)}.map { |name|
+    Gem::Specification.find_by_name(name).full_gem_path
+  }.join("\n")`;
+  const out = execFileSync("bundle", ["exec", "ruby", "-e", script], {
+    encoding: "utf8",
+    cwd: WEB,
+    env: { ...process.env, BUNDLE_GEMFILE: path.join(WEB, "Gemfile") },
+  });
+  return Object.fromEntries(names.map((name, i) => [name, out.trim().split("\n")[i]]));
 }
 
 const entries = [];
@@ -48,9 +56,10 @@ function addTree(vfsRoot, diskRoot, { include = () => true } = {}) {
 
 // ---- the gems -----------------------------------------------------------
 
-addTree("/gems/lacci", path.join(gemPath("lacci"), "lib"));
-addTree("/gems/scarpe-components", path.join(gemPath("scarpe-components"), "lib"));
-addTree("/gems/chunky_png", path.join(gemPath("chunky_png"), "lib"));
+const gems = gemPaths(["lacci", "scarpe-components", "chunky_png"]);
+addTree("/gems/lacci", path.join(gems["lacci"], "lib"));
+addTree("/gems/scarpe-components", path.join(gems["scarpe-components"], "lib"));
+addTree("/gems/chunky_png", path.join(gems["chunky_png"], "lib"));
 
 // ---- Clogs and the shims ------------------------------------------------
 

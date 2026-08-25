@@ -1,0 +1,23 @@
+# frozen_string_literal: true
+
+# The Ruby the browser runs.
+#
+# These three pure-Ruby gems are copied into the WebAssembly filesystem by
+# build.mjs; nothing here is installed for the browser to `require` at runtime.
+#
+# They are pinned separately from the repo's own Gemfile on purpose. That one
+# takes Scarpe from git for the webview backend, and because Scarpe's repo is a
+# monorepo carrying Lacci's gemspec too, Bundler resolves *Lacci* from git for
+# the whole project along with it -- a different Shoes from the released 0.5.0
+# that Hackety Hack's Shoes 3 compatibility layer is written against. The
+# difference is real and the browser suite is what found it: on git main the
+# IDE's side tabs stop opening.
+#
+# So the browser build states which Shoes it runs rather than inheriting
+# whichever one the webview spike last pulled in.
+
+source "https://rubygems.org"
+
+gem "lacci", "0.5.0"              # the Shoes API Clogs implements
+gem "scarpe-components", "0.4.0"  # Lacci's own dependency
+gem "chunky_png", "~> 1.4"        # Clogs' PNG decoder, for backends that need it
