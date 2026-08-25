@@ -145,6 +145,20 @@ export async function bootApp(page, {
     pause: () => page.evaluate(() => void window.clogs.pause()),
     resume: () => page.evaluate(() => void window.clogs.resume()),
 
+    // `ask`, `alert` and `confirm` are elements rather than the browser's own
+    // dialogs, so a test drives them the way a person does.
+    dialog: () => page.evaluate(() => window.clogs.dialog()),
+
+    answerDialog: async (text) => {
+      await page.evaluate((t) => window.clogs.answerDialog(t), text);
+      await app.advance(100);
+    },
+
+    cancelDialog: async () => {
+      await page.evaluate(() => window.clogs.cancelDialog());
+      await app.advance(100);
+    },
+
     screenshot: (path) => page.locator("canvas.clogs-window").first().screenshot({ path }),
 
     // Run Ruby inside the app -- the same VM the app is running in, so this

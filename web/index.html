@@ -36,6 +36,53 @@
          density itself. */
       canvas.clogs-window { display: block; background: #fff; outline: none; }
       #status { position: fixed; top: 8px; left: 10px; font-family: ui-monospace, monospace; opacity: .7; }
+
+      /* `ask`, `alert` and `confirm`. These are elements rather than the
+         browser's own dialogs because a page cannot count on having those --
+         an embedded webview may refuse prompt() outright -- and because Ruby
+         parks mid-program waiting for the answer either way. */
+      .clogs-dialog-veil {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0007;
+        z-index: 10;
+      }
+      .clogs-dialog {
+        min-width: 280px;
+        max-width: min(420px, 90vw);
+        padding: 20px;
+        border-radius: 10px;
+        background: Canvas;
+        color: CanvasText;
+        box-shadow: 0 10px 40px #0009;
+        font: 14px/1.5 system-ui, sans-serif;
+      }
+      .clogs-dialog-message { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .clogs-dialog-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 7px 9px;
+        margin-bottom: 14px;
+        border: 1px solid GrayText;
+        border-radius: 6px;
+        background: Field;
+        color: FieldText;
+        font: inherit;
+      }
+      .clogs-dialog-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+      .clogs-dialog-buttons button {
+        padding: 6px 16px;
+        border: 1px solid GrayText;
+        border-radius: 6px;
+        background: ButtonFace;
+        color: ButtonText;
+        font: inherit;
+        cursor: pointer;
+      }
+      .clogs-dialog-buttons .clogs-dialog-ok { border-color: transparent; background: AccentColor; color: AccentColorText; }
       #status[data-status="ready"] { display: none; }
     </style>
     <script src="/host.js"></script>

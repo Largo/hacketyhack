@@ -91,6 +91,25 @@ await app.ruby(`Clogs::App.instances.first.document_root.children.size.to_s`);
 | `build.mjs` | packs every `.rb` and asset into `dist/vfs.bin` and bundles `boot.js` |
 | `vfs.mjs` | the bundle format, shared by the builder and the page |
 | `persist.mjs` | mirrors the wasm home directory into localStorage |
+
+## Dialogs
+
+`ask`, `alert` and `confirm` are elements on the page, not the browser's own
+dialogs. Shoes' `ask` returns its answer to the line that called it and a page
+cannot block, so Ruby parks the frame mid-program and the answer resumes it —
+see `Clogs::Wasm::Runtime#modal`. While one is up the app keeps painting but
+takes no input, which is what `ask` does in Shoes: it stops the program where
+it stands.
+
+They used to be `window.prompt` and friends, which *do* block. A page cannot
+count on having them — an embedded webview may answer `prompt() is not
+supported` — and then Hackety Hack's first program does nothing at all. The
+window.* versions remain for the one case that cannot park: code running
+before there is a frame to park, like `samples/Guessing Game.rb`, whose whole
+program is a top-level ask loop with no `Shoes.app` in it.
+
+Tests drive them the way a person does: `app.dialog()`, `app.answerDialog(text)`
+and `app.cancelDialog()`.
 | `serve.mjs` | a static server, with the CRuby binary mapped in from `node_modules` |
 | `shims/` | the C extensions wasm cannot have: sqlite3, nokogiri, net/http, openssl |
 | `Gemfile` | the three pure-Ruby gems packed into the wasm filesystem, pinned |

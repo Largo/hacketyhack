@@ -13,15 +13,17 @@ module Clogs
   module Dialogs
     class << self
       def alert(_window, message)
-        Wasm::Bridge.alert(message)
+        Wasm::Runtime.modal("alert", message)
+        nil
       end
 
       def confirm(_window, message)
-        Wasm::Bridge.confirm(message)
+        Wasm::Runtime.modal("confirm", message).start_with?("ok:")
       end
 
       def ask(_window, message)
-        Wasm::Bridge.ask(message)
+        answer = Wasm::Runtime.modal("ask", message)
+        answer.start_with?("ok:") ? answer.sub(/\Aok:/, "") : nil
       end
 
       # A page cannot open a file picker without a user gesture and cannot wait

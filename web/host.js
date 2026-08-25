@@ -33,6 +33,14 @@
 
   const container = () => document.getElementById("clogs-windows") || document.body;
 
+  // The dialog currently on the page, if any. See openDialog.
+  let dialog = null;
+
+  function closeDialog() {
+    if (dialog && dialog.veil) dialog.veil.remove();
+    dialog = null;
+  }
+
   function rgba(a, r, g, b, alpha) {
     return "rgba(" + r + "," + g + "," + b + "," + (alpha / 255) + ")";
   }
@@ -349,6 +357,88 @@
       return entry && entry.ready ? entry.width + "," + entry.height : "0,0";
     },
 
+    // ---- dialogs -----------------------------------------------------
+    //
+    // Shoes' `ask` returns the answer to the line that called it, which is why
+    // these started out as window.alert and window.prompt: they are the only
+    // synchronous UI a page has. But they are not always there -- an embedded
+    // webview may refuse them outright ("prompt() is not supported") -- and
+    // they look nothing like the app they interrupt.
+    //
+    // So Ruby suspends instead. `openDialog` puts a real element on the page
+    // and returns immediately; the frame that called it is parked mid-Ruby
+    // until `dialogState` reports an answer. See Clogs::Wasm::Runtime#modal
+    // for the other half. The window.* versions remain for the one case that
+    // cannot suspend: code running before there is a frame to suspend, like
+    // samples/Guessing Game's top-level ask loop.
+
+    openDialog(kind, message) {
+      closeDialog();
+      dialog = { kind, answered: false, cancelled: false, value: "" };
+
+      const veil = document.createElement("div");
+      veil.className = "clogs-dialog-veil";
+      const box = document.createElement("div");
+      box.className = "clogs-dialog";
+
+      const text = document.createElement("p");
+      text.className = "clogs-dialog-message";
+      text.textContent = message;
+      box.appendChild(text);
+
+      let input = null;
+      if (kind === "ask") {
+        input = document.createElement("input");
+        input.type = "text";
+        input.className = "clogs-dialog-input";
+        box.appendChild(input);
+      }
+
+      const buttons = document.createElement("div");
+      buttons.className = "clogs-dialog-buttons";
+      const answer = (cancelled) => {
+        dialog.value = input ? input.value : "";
+        dialog.cancelled = cancelled;
+        dialog.answered = true;
+        veil.remove();
+      };
+      if (kind !== "alert") {
+        const cancel = document.createElement("button");
+        cancel.textContent = "Cancel";
+        cancel.onclick = () => answer(true);
+        buttons.appendChild(cancel);
+      }
+      const ok = document.createElement("button");
+      ok.textContent = "OK";
+      ok.className = "clogs-dialog-ok";
+      ok.onclick = () => answer(false);
+      buttons.appendChild(ok);
+      box.appendChild(buttons);
+
+      veil.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") answer(false);
+        else if (e.key === "Escape" && kind !== "alert") answer(true);
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+      });
+
+      veil.appendChild(box);
+      document.body.appendChild(veil);
+      dialog.veil = veil;
+      (input || ok).focus();
+    },
+
+    // "none", "pending", "cancel", or "ok:<answer>". Reading an answer clears
+    // it, so each dialog is reported exactly once.
+    dialogState() {
+      if (!dialog) return "none";
+      if (!dialog.answered) return "pending";
+      const answered = dialog;
+      dialog = null;
+      return answered.cancelled ? "cancel" : "ok:" + answered.value;
+    },
+
     alert(message) { window.alert(message); },
     confirm(message) { return window.confirm(message); },
     ask(message) { return window.prompt(message); },
@@ -520,6 +610,33 @@
     },
 
     framesPainted() { return framesPainted; },
+
+    // Dialogs are elements now, so a test drives them the way a person does
+    // rather than through Playwright's native-dialog channel.
+    dialog() {
+      const box = document.querySelector(".clogs-dialog");
+      if (!box) return null;
+      const input = box.querySelector(".clogs-dialog-input");
+      return { message: box.querySelector(".clogs-dialog-message").textContent, hasInput: !!input };
+    },
+
+    answerDialog(text) {
+      const box = document.querySelector(".clogs-dialog");
+      if (!box) throw new Error("clogs.answerDialog: no dialog is open");
+      const input = box.querySelector(".clogs-dialog-input");
+      if (input && text !== undefined) input.value = text;
+      box.querySelector(".clogs-dialog-ok").click();
+      return this;
+    },
+
+    cancelDialog() {
+      const box = document.querySelector(".clogs-dialog");
+      if (!box) throw new Error("clogs.cancelDialog: no dialog is open");
+      const cancel = box.querySelector("button:not(.clogs-dialog-ok)");
+      if (!cancel) throw new Error("clogs.cancelDialog: this dialog cannot be cancelled");
+      cancel.click();
+      return this;
+    },
 
     // Stop the page's own animation frames so a test owns the clock outright.
     pause() { running = false; return this; },

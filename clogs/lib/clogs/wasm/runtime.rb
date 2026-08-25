@@ -71,9 +71,20 @@ module Clogs
       # for "the app has settled" rather than for a wall-clock delay.
       def tick(now_ms, events_json)
         @now = now_ms
-        dispatch(events_json) unless events_json.empty? || events_json == "[]"
-        apps.values.each { |app| app.fire_due_timers(now_ms) }
-        GreenThreads.run_pending(now_ms)
+
+        if @parked
+          # A dialog is up and a frame is parked inside Ruby waiting for it.
+          # Nothing else runs -- no input, no timers -- because that is what
+          # `ask` does in Shoes: it stops the program where it stands. The
+          # canvas still repaints, so the app does not go grey behind the
+          # dialog.
+          queue_events(events_json)
+          state = Bridge.dialog_state
+          resume_frame(take_parked, state) unless state == "pending"
+        else
+          run_frame(events_json)
+        end
+
         painted = 0
         apps.values.each do |app|
           next unless app.canvas&.dirty?
@@ -85,6 +96,83 @@ module Clogs
       rescue StandardError => e
         App.report_error(e)
         0
+      end
+
+      # ---- frames, and parking one -------------------------------------
+      #
+      # A frame's Ruby runs inside a Fiber so that a dialog can stop halfway
+      # through it. Shoes' `ask` returns its answer to the line that called it,
+      # and a page cannot block; parking the frame and resuming it when the
+      # answer arrives is how it does both. See Wasm::Dialogs.
+
+      def run_frame(events_json)
+        queued = @queued_events
+        @queued_events = nil
+
+        frame = Fiber.new do
+          queued&.each { |batch| dispatch(batch) }
+          dispatch(events_json) unless blank_events?(events_json)
+          apps.values.each { |app| app.fire_due_timers(@now) }
+          GreenThreads.run_pending(@now)
+        end
+        resume_frame(frame, nil)
+      end
+
+      def resume_frame(frame, value)
+        @in_frame = true
+        frame.resume(value)
+        @parked = frame if frame.alive?
+      ensure
+        @in_frame = false
+      end
+
+      def take_parked
+        parked = @parked
+        @parked = nil
+        parked
+      end
+
+      # Input that arrives while a frame is parked is kept, not dropped: the
+      # click that dismissed the dialog is not the only thing that might have
+      # happened.
+      def queue_events(events_json)
+        return if blank_events?(events_json)
+
+        (@queued_events ||= []) << events_json
+      end
+
+      def blank_events?(events_json)
+        events_json.nil? || events_json.empty? || events_json == "[]"
+      end
+
+      # Put a dialog on the page and park until it is answered, or -- when
+      # there is no frame to park -- fall back to the browser's own.
+      #
+      # A green thread is its own Fiber, so yielding from inside one would
+      # suspend that rather than the frame, and its scheduler would resume it
+      # with a nil that was never an answer. Those take the fallback too.
+      def modal(kind, message)
+        message = message.to_s
+        return native_modal(kind, message) unless @in_frame && GreenThreads.current.nil?
+
+        Bridge.open_dialog(kind, message)
+        Fiber.yield.to_s
+      end
+
+      def native_modal(kind, message)
+        case kind
+        when "confirm" then Bridge.confirm(message) ? "ok:" : "cancel"
+        when "ask"
+          answer = Bridge.ask(message)
+          answer.nil? ? "cancel" : "ok:#{answer}"
+        else
+          Bridge.alert(message)
+          "ok:"
+        end
+      rescue StandardError => e
+        # An embedded webview that refuses dialogs outright lands here.
+        App.report_error(e)
+        "cancel"
       end
 
       # The page's event queue, as [kind, window_id, ...] tuples. Anything for

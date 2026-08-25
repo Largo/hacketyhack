@@ -91,9 +91,23 @@ module Clogs
 
       # ---- dialogs -------------------------------------------------------
       #
-      # window.alert/confirm/prompt block the page synchronously, which is
-      # exactly the Shoes semantics -- `ask` returns the answer -- and the one
-      # place where the browser's oldest API is the right one.
+      # The page puts a real element up and answers later; Runtime#modal parks
+      # the frame in between, so `ask` still returns to the line that called
+      # it. `dialog_state` is "none", "pending", "cancel" or "ok:<answer>".
+
+      def open_dialog(kind, message)
+        host.call(:openDialog, kind.to_s, message.to_s)
+        nil
+      end
+
+      def dialog_state
+        host.call(:dialogState).to_s
+      end
+
+      # The browser's own dialogs, for the one case that cannot park: code
+      # running before there is a frame to park. They are not always available
+      # -- an embedded webview may answer `prompt() is not supported` -- which
+      # is why they are the fallback rather than the mechanism.
 
       def alert(message)
         host.call(:alert, message.to_s)
