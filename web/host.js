@@ -204,6 +204,13 @@
   // small and stretched. `resizable: false` (samples/Arcs, Follow and Pong all
   // ask for it) keeps the size the program declared.
   //
+  // What it never does is go *below* the size the program asked for. That size
+  // is the one the layout was written against, and a Shoes window on a desktop
+  // will not usefully shrink past it either; below it, text and controls start
+  // overlapping rather than reflowing. So a small browser window gets the app
+  // at its declared size and page scrollbars, which is also what makes a
+  // non-resizable app reachable on a screen narrower than it is.
+  //
   // With more than one window open, nobody fills: two canvases each claiming
   // the viewport would only fight over it. Nested Shoes.app windows are rare
   // and small, and their declared sizes are what they were written for.
@@ -211,9 +218,13 @@
   function fitWindow(id, win) {
     const dpr = window.devicePixelRatio || 1;
     const fills = win.resizable && windows.size === 1;
-    const box = container().getBoundingClientRect();
-    const cssWidth = fills ? Math.max(1, Math.round(box.width)) : win.declaredWidth;
-    const cssHeight = fills ? Math.max(1, Math.round(box.height)) : win.declaredHeight;
+    // The document element rather than the container: this measures the
+    // viewport without the scrollbars, so growing the canvas past the window
+    // cannot shrink the number it was measured against and start an argument.
+    const availWidth = document.documentElement.clientWidth;
+    const availHeight = document.documentElement.clientHeight;
+    const cssWidth = fills ? Math.max(win.declaredWidth, availWidth) : win.declaredWidth;
+    const cssHeight = fills ? Math.max(win.declaredHeight, availHeight) : win.declaredHeight;
 
     if (cssWidth === win.cssWidth && cssHeight === win.cssHeight && dpr === win.dpr) return false;
 
@@ -230,9 +241,18 @@
     return true;
   }
 
+  // Twice, because the first pass can summon a scrollbar and a scrollbar
+  // changes the viewport it was measured against. The size only ever moves in
+  // one direction -- toward the larger of the declared size and the space --
+  // so a second pass settles it, and there is no third.
   function fitAll() {
     let changed = false;
-    for (const [id, win] of windows) changed = fitWindow(id, win) || changed;
+    for (let pass = 0; pass < 2; pass++) {
+      let passChanged = false;
+      for (const [id, win] of windows) passChanged = fitWindow(id, win) || passChanged;
+      changed = changed || passChanged;
+      if (!passChanged) break;
+    }
     return changed;
   }
 
@@ -267,7 +287,7 @@
         dpr: 0,
       };
       windows.set(id, win);
-      fitWindow(id, win);
+      fitAll();
       document.title = title;
       canvas.focus();
       return id;

@@ -49,13 +49,109 @@ test.describe("window sizing", () => {
     const app = await bootApp(page);
     const before = (await app.describe()).drawables.width;
 
-    await page.setViewportSize({ width: 640, height: 700 });
+    // Still wider than the 790 Hackety Hack declares, so it follows the window.
+    await page.setViewportSize({ width: 900, height: 700 });
     await app.settle();
 
     const [win] = await app.windows();
-    expect(win.width).toBe(640);
-    expect((await app.describe()).drawables.width).toBe(640);
-    expect(before).not.toBe(640);
+    expect(win.width).toBe(900);
+    expect((await app.describe()).drawables.width).toBe(900);
+    expect(before).not.toBe(900);
+  });
+
+  test("a window smaller than the app scrolls rather than squashing it", async ({ page }) => {
+    // Below the size a program was written against, reflowing stops helping --
+    // text and controls start overlapping instead. So the app keeps its
+    // declared size and the page grows scrollbars to reach the rest of it.
+    const app = await bootApp(page);
+
+    await page.setViewportSize({ width: 500, height: 400 });
+    await app.settle();
+
+    const [win] = await app.windows();
+    expect(win.width, "the app was squashed below its declared width").toBeGreaterThan(500);
+    expect(win.height).toBeGreaterThan(400);
+
+    const overflow = await page.evaluate(() => ({
+      horizontal: document.body.scrollWidth - document.documentElement.clientWidth,
+      vertical: document.body.scrollHeight - document.documentElement.clientHeight,
+    }));
+    expect(overflow.horizontal, "no way to scroll to the rest of it").toBeGreaterThan(0);
+    expect(overflow.vertical).toBeGreaterThan(0);
+  });
+
+  test("growing the window back does not leave a stray scrollbar", async ({ page }) => {
+    // Sizing the canvas can summon a scrollbar, and a scrollbar changes the
+    // viewport the canvas was measured against -- so the fit runs again.
+    const app = await bootApp(page);
+
+    await page.setViewportSize({ width: 500, height: 400 });
+    await app.settle();
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await app.settle();
+
+    const overflow = await page.evaluate(() => ({
+      horizontal: document.body.scrollWidth - document.documentElement.clientWidth,
+      vertical: document.body.scrollHeight - document.documentElement.clientHeight,
+    }));
+    expect(overflow.horizontal).toBe(0);
+    expect(overflow.vertical).toBe(0);
+  });
+});
+
+test.describe("persistence", () => {
+  test("a program written in the app survives a reload", async ({ page }) => {
+    // The wasm filesystem is built fresh on every load, so without this the
+    // IDE greeted a returning user with "You have no programs" -- while the
+    // preference saying they had been here before did survive.
+    const app = await bootApp(page);
+
+    await app.ruby(`
+      require "fileutils"
+      FileUtils.makedirs(HH::USER)
+      File.write(File.join(HH::USER, "Persisted.rb"), "alert 'still here'")
+      "ok"
+    `);
+    await page.evaluate(() => window.__clogsPersist.save());
+
+    await page.reload();
+    await page.waitForFunction(() => window.__clogsStatus === "ready", null, { timeout: 120_000 });
+
+    const contents = await page.evaluate(() =>
+      window.__clogsVM.eval(`File.read(File.join(HH::USER, "Persisted.rb")) rescue "MISSING"`).toString());
+    expect(contents).toBe("alert 'still here'");
+  });
+
+  test("the IDE lists a program it saved last time", async ({ page }) => {
+    const app = await bootApp(page);
+    await app.ruby(`
+      require "fileutils"
+      FileUtils.makedirs(HH::USER)
+      File.write(File.join(HH::USER, "Yesterdays Program.rb"), "para 'hello'")
+      "ok"
+    `);
+    await page.evaluate(() => window.__clogsPersist.save());
+
+    await page.reload();
+    await page.waitForFunction(() => window.__clogsStatus === "ready", null, { timeout: 120_000 });
+    await page.evaluate(() => { window.clogs.advance(3000); });
+
+    const texts = await page.evaluate(() =>
+      window.clogs.find(/[^]/).map((hit) => hit.text).filter(Boolean));
+    expect(texts).toContain("Yesterdays Program");
+  });
+
+  test("only the home directory is kept, not the whole filesystem", async ({ page }) => {
+    // The app, its samples and its lessons are shipped in the bundle and would
+    // be several megabytes of localStorage for no reason.
+    await bootApp(page);
+    await page.evaluate(() => window.__clogsPersist.save());
+
+    const saved = await page.evaluate(() => JSON.parse(window.localStorage.getItem("hh.home") || "null"));
+    expect(saved).not.toBeNull();
+    for (const path of Object.keys(saved.files)) {
+      expect(path.startsWith(".hacketyhack"), `${path} is not in the home directory`).toBe(true);
+    }
   });
 });
 

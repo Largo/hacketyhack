@@ -90,6 +90,7 @@ await app.ruby(`Clogs::App.instances.first.document_root.children.size.to_s`);
 | `host.js` | owns the canvas: replays the command buffer, queues input, exposes `window.clogs` |
 | `build.mjs` | packs every `.rb` and asset into `dist/vfs.bin` and bundles `boot.js` |
 | `vfs.mjs` | the bundle format, shared by the builder and the page |
+| `persist.mjs` | mirrors the wasm home directory into localStorage |
 | `serve.mjs` | a static server, with the CRuby binary mapped in from `node_modules` |
 | `shims/` | the C extensions wasm cannot have: sqlite3, nokogiri, net/http, openssl |
 | `Gemfile` | the three pure-Ruby gems packed into the wasm filesystem, pinned |
@@ -116,6 +117,21 @@ and gets whatever the browser window is. A program that opts out
 (`Shoes.app :resizable => false`, as `samples/Arcs.rb` does) keeps the size it
 asked for. Nothing is ever scaled: the backing store is sized for the display's
 density, so text stays sharp on a retina screen.
+
+It never goes *below* the declared size, though. That is the size the layout
+was written against, and under it things overlap rather than reflow — so a
+small window gets the app at its own size and page scrollbars to reach the rest
+of it.
+
+## What is kept
+
+The wasm filesystem is built fresh on every load, so anything written to it
+would be gone on reload. The home directory — where Hackety Hack keeps
+`~/.hacketyhack`, which is to say your programs — is mirrored into
+localStorage: restored before Ruby starts, saved when it changes and when the
+tab goes away. Only that subtree, since the app and its samples are shipped in
+the bundle already. `web/persist.mjs` has the details, including what happens
+if it outgrows localStorage.
 
 ## What is not there
 

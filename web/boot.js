@@ -2,6 +2,7 @@
 import { RubyVM } from "@ruby/wasm-wasi";
 import { WASI, OpenFile, File, Directory, PreopenDirectory, ConsoleStdout } from "@bjorn3/browser_wasi_shim";
 import { unpack, buildTree } from "./vfs.mjs";
+import * as persist from "./persist.mjs";
 
 const params = new URLSearchParams(location.search);
 
@@ -16,6 +17,14 @@ async function boot() {
   // to: HOME is where Hackety Hack keeps ~/.hacketyhack.
   dirFor(["home"]);
   dirFor(["tmp"]);
+  // buildTree's dirFor hands back a directory's *contents* map, which is what
+  // it wants for filling one in; persistence walks directories, so it wants
+  // the Directory itself.
+  const home = root.get("home");
+
+  // Whatever was written here last time, before Ruby gets a chance to decide
+  // the directory is empty.
+  persist.apply(home, persist.load(), { File, Directory });
 
   const env = [
     "HOME=/home",
@@ -42,6 +51,9 @@ async function boot() {
   const { vm } = await RubyVM.instantiateModule({ module: wasmModule, wasip1: wasi });
 
   window.__clogsVM = vm;
+  // Started before the app runs, so a program written and then immediately
+  // reloaded is still saved.
+  window.__clogsPersist = persist.startAutosave(home);
   vm.eval(`load "/boot.rb"`);
   window.__clogsReady = true;
 }
