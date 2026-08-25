@@ -68,24 +68,28 @@ end
 #
 #   https://github.com/Largo/scarpe/tree/hacketyhack-webview-fixes
 #
-# Note what this costs, because it is not only the webview gem. Scarpe's repo
-# is a monorepo that carries Lacci's gemspec too, so Bundler takes *Lacci* from
-# git along with it -- for the whole project, whatever this group's options
-# say. Marking the group optional does not change that: Lacci is a dependency
-# of clogs as well, so it is resolved either way, and the lockfile has one
-# Lacci in it.
+# Optional, like every other alternate backend here, and for the same reason:
+# `scarpe` pulls in webview_ruby, a native extension that wants GTK 3's and
+# WebKit's development packages. Every CI job that installs a *different*
+# toolkit was failing to bundle because of it. Opt in with
 #
-# That Lacci is not the one Hackety Hack's Shoes 3 compatibility layer was
-# written against. `rake samples` and `rake boot` pass on both, but they only
-# open a window and close it; the browser suite drives the IDE, and on git main
-# the side tabs stop opening. So the two cannot be assumed interchangeable, and
-# the browser build pins released Lacci 0.5.0 for itself in web/Gemfile rather
-# than inheriting whichever one this group last pulled in.
+#   bundle config set --local with webview && bundle install
 #
-# Untangling that properly means either sending these fixes upstream and going
+# What being optional does not do is keep Lacci out. Scarpe's repo is a
+# monorepo carrying Lacci's gemspec, and Lacci is a dependency of clogs as
+# well, so there is one Lacci in the lockfile and it comes from git either way.
+# It is pure Ruby, so it costs nothing to install -- but it is not the Lacci
+# Hackety Hack's Shoes 3 compatibility layer was written against. `rake
+# samples` and `rake boot` pass on both, since they only open a window and
+# close it again; the browser suite drives the IDE, and on git main the side
+# tabs stop opening. So the browser build pins released Lacci 0.5.0 for itself
+# in web/Gemfile rather than inheriting whichever one this group last pulled
+# in.
+#
+# Untangling that properly means either landing these fixes upstream and going
 # back to released gems, or giving the webview spike its own bundle the way
-# web/ has one.
-group :webview do
+# web/ now has one.
+group :webview, optional: true do
   gem "scarpe", github: "Largo/scarpe", branch: "hacketyhack-webview-fixes"
   gem "lacci", github: "Largo/scarpe", branch: "hacketyhack-webview-fixes", glob: "lacci/*.gemspec"
 end
