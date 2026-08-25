@@ -108,6 +108,15 @@ microseconds and a frame of Hackety Hack is thousands of drawing operations.
 `clogs/lib/clogs/wasm/painter.rb` and `host.js` hold the two halves of the
 opcode table; they have to agree.
 
+## Sizing
+
+A Shoes window resizes unless the program says otherwise, so a resizable app is
+given the whole page and told to lay out again — Hackety Hack asks for 790x550
+and gets whatever the browser window is. A program that opts out
+(`Shoes.app :resizable => false`, as `samples/Arcs.rb` does) keeps the size it
+asked for. Nothing is ever scaled: the backing store is sized for the display's
+density, so text stays sharp on a retina screen.
+
 ## What is not there
 
 - **No sockets.** Everything Hackety Hack does over the network goes to

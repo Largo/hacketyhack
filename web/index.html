@@ -6,20 +6,31 @@
     <title>Hackety Hack</title>
     <style>
       :root { color-scheme: light dark; }
+      html, body { height: 100%; }
       body {
         margin: 0;
-        display: flex;
-        min-height: 100vh;
-        align-items: center;
-        justify-content: center;
+        overflow: hidden;
         background: #1b1b1b;
         font: 14px/1.4 system-ui, sans-serif;
         color: #ddd;
       }
-      #clogs-windows { display: flex; flex-wrap: wrap; gap: 12px; }
-      /* Clogs paints its own everything; the canvas just has to not be blurry
-         and not be scaled by the page. */
-      canvas.clogs-window { background: #fff; box-shadow: 0 6px 30px #0008; outline: none; }
+      /* A resizable Shoes window is given this whole box and lays out against
+         it, so the box has to be the page. Percentages rather than vw/vh: vw
+         counts the scrollbar, which would make the canvas overflow and summon
+         the scrollbar it was measuring. */
+      #clogs-windows {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+      }
+      /* Clogs paints its own everything; the canvas just has to not be scaled
+         by the page -- host.js sizes the backing store for the display's
+         density itself. */
+      canvas.clogs-window { display: block; background: #fff; outline: none; }
       #status { position: fixed; top: 8px; left: 10px; font-family: ui-monospace, monospace; opacity: .7; }
       #status[data-status="ready"] { display: none; }
     </style>

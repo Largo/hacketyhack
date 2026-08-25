@@ -47,15 +47,29 @@ module Clogs
 
     attr_reader :window_id
 
+    # Shoes windows resize unless the program says otherwise. Lacci defaults
+    # this to true, so only a program that opted out reads false.
+    def resizable?
+      style(:resizable) != false
+    end
+
     def init
       App.ensure_libui!
       @initialized = true
 
       @window_id = Wasm::Runtime.next_window_id
       @window = @window_id
-      Wasm::Bridge.open_window(@window_id, title, app_width, app_height)
+      Wasm::Bridge.open_window(@window_id, title, app_width, app_height, resizable?)
 
-      @canvas = Canvas.new(@window_id, app_width, app_height)
+      # The page may have sized the canvas to itself rather than to what the
+      # program asked for -- a resizable Shoes window gets the whole page here,
+      # the way it would get the whole window on a desktop -- so the canvas
+      # starts at the size the page actually gave it.
+      width, height = Wasm::Bridge.window_size(@window_id)
+      width = app_width if width.to_i < 1
+      height = app_height if height.to_i < 1
+
+      @canvas = Canvas.new(@window_id, width.to_i, height.to_i)
       @canvas.on_draw = method(:on_draw)
       @canvas.on_mouse = method(:on_mouse)
       @canvas.on_key = method(:on_key)

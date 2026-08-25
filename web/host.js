@@ -45,9 +45,14 @@
 
   // ---- the command buffer ---------------------------------------------
 
-  function replay(ctx, ops, strings) {
+  function replay(ctx, ops, strings, dpr) {
     let i = 0;
     const n = ops.length;
+    // Ruby lays out in CSS pixels and knows nothing about the display's
+    // density; the backing store is dpr times bigger so the text is not soft
+    // on a retina screen. setTransform is absolute, so this both establishes
+    // the scale and clears whatever the last frame left behind.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.textBaseline = "alphabetic";
     while (i < n) {
       switch (ops[i++]) {
@@ -191,6 +196,48 @@
     return painted | 0;
   }
 
+  // ---- window sizing ---------------------------------------------------
+  //
+  // A Shoes window is resizable unless the program says otherwise, and Shoes
+  // programs lay out against the size they are given -- so a resizable app
+  // gets the whole page and is told to lay out again, rather than being drawn
+  // small and stretched. `resizable: false` (samples/Arcs, Follow and Pong all
+  // ask for it) keeps the size the program declared.
+  //
+  // With more than one window open, nobody fills: two canvases each claiming
+  // the viewport would only fight over it. Nested Shoes.app windows are rare
+  // and small, and their declared sizes are what they were written for.
+
+  function fitWindow(id, win) {
+    const dpr = window.devicePixelRatio || 1;
+    const fills = win.resizable && windows.size === 1;
+    const box = container().getBoundingClientRect();
+    const cssWidth = fills ? Math.max(1, Math.round(box.width)) : win.declaredWidth;
+    const cssHeight = fills ? Math.max(1, Math.round(box.height)) : win.declaredHeight;
+
+    if (cssWidth === win.cssWidth && cssHeight === win.cssHeight && dpr === win.dpr) return false;
+
+    win.cssWidth = cssWidth;
+    win.cssHeight = cssHeight;
+    win.dpr = dpr;
+    win.canvas.style.width = cssWidth + "px";
+    win.canvas.style.height = cssHeight + "px";
+    // Resizing the backing store clears it, which is fine: a resize always
+    // ends in a repaint, and Ruby is about to be told to lay out again.
+    win.canvas.width = Math.round(cssWidth * dpr);
+    win.canvas.height = Math.round(cssHeight * dpr);
+    events.push(["r", id, cssWidth, cssHeight]);
+    return true;
+  }
+
+  function fitAll() {
+    let changed = false;
+    for (const [id, win] of windows) changed = fitWindow(id, win) || changed;
+    return changed;
+  }
+
+  window.addEventListener("resize", fitAll);
+
   // ---- the host object ------------------------------------------------
 
   const ClogsHost = {
@@ -200,17 +247,27 @@
     onImageLoaded(fn) { rubyImageLoaded = fn; },
     onDescribe(fn) { rubyDescribe = fn; },
 
-    openWindow(id, title, width, height) {
+    openWindow(id, title, width, height, resizable) {
       const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
       canvas.className = "clogs-window";
       canvas.tabIndex = 0;
       canvas.dataset.clogsWindow = String(id);
       canvas.dataset.clogsTitle = title;
       container().appendChild(canvas);
       bindEvents(id, canvas);
-      windows.set(id, { canvas, ctx: canvas.getContext("2d"), title });
+      const win = {
+        canvas,
+        ctx: canvas.getContext("2d"),
+        title,
+        resizable: resizable !== 0,
+        declaredWidth: width,
+        declaredHeight: height,
+        cssWidth: 0,
+        cssHeight: 0,
+        dpr: 0,
+      };
+      windows.set(id, win);
+      fitWindow(id, win);
       document.title = title;
       canvas.focus();
       return id;
@@ -220,11 +277,12 @@
       const win = windows.get(id);
       if (win) win.canvas.remove();
       windows.delete(id);
+      fitAll();
     },
 
     windowSize(id) {
       const win = windows.get(id);
-      return win ? win.canvas.width + "," + win.canvas.height : "0,0";
+      return win ? win.cssWidth + "," + win.cssHeight : "0,0";
     },
 
     setCursor(id, cursor) {
@@ -235,7 +293,7 @@
     flush(id, opsJson, stringsJson) {
       const win = windows.get(id);
       if (!win) return;
-      replay(win.ctx, JSON.parse(opsJson), JSON.parse(stringsJson));
+      replay(win.ctx, JSON.parse(opsJson), JSON.parse(stringsJson), win.dpr);
     },
 
     measureText(text, font) {

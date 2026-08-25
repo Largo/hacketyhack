@@ -54,8 +54,8 @@ module Clogs
 
       # ---- windows -------------------------------------------------------
 
-      def open_window(window_id, title, width, height)
-        host.call(:openWindow, window_id, title.to_s, width.to_i, height.to_i)
+      def open_window(window_id, title, width, height, resizable)
+        host.call(:openWindow, window_id, title.to_s, width.to_i, height.to_i, resizable ? 1 : 0)
       end
 
       def close_window(window_id)

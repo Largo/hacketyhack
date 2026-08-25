@@ -85,28 +85,55 @@ if Shoes::Slot.instance_method(:destroy).owner != Shoes::Slot
   end
 end
 
-# Lacci finds a subscription to cancel by scanning every subscription it holds
-# -- there is no index from an unsubscribe id back to where it lives -- and
-# when it empties a handler list it leaves the now-empty entry in place. The
-# table therefore only ever grows: one dead entry per drawable that ever
-# existed, per event it subscribed to, all of them walked again on the next
-# unsubscribe.
+# Cancelling a subscription costs Lacci a walk over every subscription it
+# holds: the unsubscribe id says nothing about where the handler lives, so
+# `unsub_from_events` searches the whole table for it, and leaves the emptied
+# entries behind afterwards so the next search is no shorter.
 #
-# A program that rebuilds its document every frame unsubscribes hundreds of
-# times a second, so that is quadratic in the number of frames. Arcs still slid
-# from 4.8 to 14.8 seconds of work per second of animation with the leak above
-# already fixed. Dropping the empty entries as they are found keeps the table
-# proportional to what is actually subscribed. Both halves are safe: Lacci
-# re-creates the entries with `||=` when subscribing, and reads them with
-# `.compact` when dispatching.
+# Nothing notices until something unsubscribes in bulk, and then everything
+# does. Every Shoes drawable subscribes six times, so tearing down a slot
+# unsubscribes six times per drawable in it -- and Hackety Hack rebuilds a
+# whole tab that way. Opening the Home tab was destroying about eighty
+# drawables against a table of some fourteen hundred entries: two thirds of a
+# million hash steps, and about a second of the click.
+#
+# So remember where each subscription went, and cancel it in one step. Ids
+# from before this file loaded are not in the index and fall back to the
+# search. Dropping a bucket once it empties is safe -- Lacci re-creates them
+# with `||=` on subscribe and reads them with `.compact` on dispatch -- and it
+# is what keeps the table proportional to what is really subscribed rather
+# than to everything that ever was.
 module Clogs
-  module PruneEmptySubscriptions
+  module IndexedSubscriptions
+    def subscribe_to_event(event_name, event_target, &handler)
+      unsub_id = super
+      Clogs.subscription_index[unsub_id] = [event_name, event_target]
+      unsub_id
+    end
+
     def unsub_from_events(unsub_id)
       raise "Must provide an unsubscribe ID!" if unsub_id.nil?
       return unless Shoes::DisplayService.class_variable_defined?(:@@display_event_handlers)
 
-      Shoes::DisplayService.class_variable_get(:@@display_event_handlers).each_value do |target_hash|
-        target_hash.delete_if do |_target, handlers|
+      table = Shoes::DisplayService.class_variable_get(:@@display_event_handlers)
+      where = Clogs.subscription_index.delete(unsub_id)
+      return unsub_by_search(table, unsub_id) unless where
+
+      event_name, target = where
+      by_target = table[event_name]
+      handlers = by_target && by_target[target]
+      return nil unless handlers
+
+      handlers.delete_if { |handler| handler[:unsub_id] == unsub_id }
+      by_target.delete(target) if handlers.empty?
+      nil
+    end
+
+    private
+
+    def unsub_by_search(table, unsub_id)
+      table.each_value do |by_target|
+        by_target.delete_if do |_target, handlers|
           handlers.delete_if { |handler| handler[:unsub_id] == unsub_id }
           handlers.empty?
         end
@@ -114,8 +141,12 @@ module Clogs
       nil
     end
   end
+
+  def self.subscription_index
+    @subscription_index ||= {}
+  end
 end
-Shoes::DisplayService.singleton_class.prepend(Clogs::PruneEmptySubscriptions)
+Shoes::DisplayService.singleton_class.prepend(Clogs::IndexedSubscriptions)
 
 # Shoes lets you click a slot, but Lacci declares no `click` style for one, so
 # nothing tells the display side which slots want a click and which are merely
