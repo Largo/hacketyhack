@@ -1,9 +1,14 @@
 # frozen_string_literal: true
 
 require_relative "drawable"
-require_relative "canvas"
-require_relative "dialogs"
 require_relative "clipboard"
+
+# The canvas and the dialogs are backend-specific; clogs.rb has already loaded
+# whichever pair belongs to the selected backend. These are libui's.
+if Clogs.libui?
+  require_relative "canvas"
+  require_relative "dialogs"
+end
 
 module Clogs
   # The display side of Shoes::App: one libui window, one canvas, and the
@@ -454,6 +459,9 @@ module Clogs
         UI::L.init
         self.libui_initialized = true
       end
+      # The backend-neutral name for the same thing; the other backends define
+      # it too, so callers that are not libui-specific can use it.
+      alias_method :ensure_backend!, :ensure_libui!
 
       # The case statement `#builtin` used to run inline against @window;
       # factored out so a dialog can also run with no owning window (see

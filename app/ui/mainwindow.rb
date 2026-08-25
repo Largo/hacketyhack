@@ -2,6 +2,38 @@ require 'app/boot'
 
 require 'json'
 
+if ENV['HH_DEBUG_WIDTH']
+  module HH::DebugWidthTrace
+    def style(*args, **kwargs)
+      if is_a?(Shoes::App) && kwargs.key?(:width) && kwargs[:width].to_i < 200
+        $stderr.puts "[HH_DEBUG_WIDTH] Shoes::App#style(width: #{kwargs[:width].inspect}) via style()"
+        $stderr.puts caller(0..12).map { |l| "    #{l}" }.join("\n")
+      end
+      super
+    end
+
+    def width=(val)
+      if is_a?(Shoes::App) && val.to_i < 200
+        $stderr.puts "[HH_DEBUG_WIDTH] Shoes::App#width= #{val.inspect}"
+        $stderr.puts caller(0..12).map { |l| "    #{l}" }.join("\n")
+      end
+      super
+    end
+
+    # Catches direct `@width = val`/`instance_variable_set(:@width, val)`
+    # writes too, in case something bypasses the style()/width= API paths
+    # traced above entirely.
+    def instance_variable_set(name, val)
+      if is_a?(Shoes::App) && name.to_s == "@width" && val.to_i < 200 && val.to_i != instance_variable_get(:@width).to_i
+        $stderr.puts "[HH_DEBUG_WIDTH] Shoes::App instance_variable_set(:@width, #{val.inspect}) (was #{instance_variable_get(:@width).inspect})"
+        $stderr.puts caller(0..12).map { |l| "    #{l}" }.join("\n")
+      end
+      super
+    end
+  end
+  Shoes::Drawable.prepend(HH::DebugWidthTrace)
+end
+
 # methods for the main app
 module HH::App
   # starts a lesson
@@ -50,8 +82,11 @@ module HH::App
   end
 end
 
-w = (HH::PREFS['width'] || '790').to_i
-h = (HH::PREFS['height'] || '550').to_i
+# clamp to a sane minimum: a corrupted or tiny saved size (e.g. from a
+# backend resize-reporting bug) would otherwise persist forever, since
+# closing the app just saves back whatever size it was opened at
+w = [(HH::PREFS['width'] || '790').to_i, 550].max
+h = [(HH::PREFS['height'] || '550').to_i, 400].max
 window :title => "Hackety Hack", :width => w, :height => h do
   HH::APP = self
   extend HH::App, HH::Widgets, HH::Observable

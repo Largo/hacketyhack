@@ -12,12 +12,22 @@
 # already provide it -- so as Lacci catches up these shims quietly stop being
 # used.
 
-# TEMPORARY: Scarpe's webview display service is the default backend while
-# it's being evaluated against libui (see clogs/lib/clogs/webview.rb).
-# CLOGS_BACKEND=libui switches back to the validated libui renderer. To
-# restore libui as the default, flip this ternary back (webview opt-in, not
-# opt-out).
-require(ENV["CLOGS_BACKEND"] == "libui" ? "clogs" : "clogs/webview")
+# Nokogiri comes first on purpose. It carries its own libxml2 inside its
+# precompiled extension, but wxWidgets links the system's, and whichever is
+# loaded first is the one Nokogiri ends up calling. Under CLOGS_BACKEND=wx in
+# the other order Nokogiri silently binds to whatever libxml2 the distribution
+# ships -- 2.9.14 against the 2.13.9 it was built for, on Ubuntu 24.04 -- and
+# warns about it on stderr. Loading it first keeps its own.
+require "nokogiri"
+
+# CLOGS_BACKEND=webview is an alternate Clogs entry point that renders
+# through Scarpe's own webview display service instead of Clogs' native
+# renderers -- see clogs/lib/clogs/webview.rb. It bypasses clogs.rb's own
+# BACKENDS dispatch entirely (Scarpe requires "shoes"/Lacci itself and
+# registers its own display service), so it has to branch before that
+# require rather than go through Clogs.backend like libui/fox/wx/qt/gtk3/
+# nappgui do.
+require(ENV["CLOGS_BACKEND"] == "webview" ? "clogs/webview" : "clogs")
 
 # `require "hpricot"` in a user program should find our Nokogiri-backed shim.
 $LOAD_PATH.unshift(File.expand_path("../shims", __dir__))
@@ -228,9 +238,16 @@ class Shoes::Para
   shoes_styles :marker unless shoes_style_name?(:marker)
 
   def cursor=(position)
-    # `cursor = :marker` collapses the selection: caret moves to the marker,
-    # or stays put when no marker is set.
-    position = marker || text_cursor if position == :marker
+    # `cursor = :marker` collapses the selection: the caret moves to the
+    # marker, or stays put when no marker is set, and either way the
+    # selection is over -- so the marker has to go with it. Leaving it set
+    # is what made a second backspace do nothing: the editor skips setting
+    # a marker when one is already there, so `highlight` came back as a
+    # zero-length range at the caret and it deleted zero characters.
+    if position == :marker
+      position = marker || text_cursor
+      self.marker = nil
+    end
     self.text_cursor = position
   end unless method_defined?(:cursor=)
 
@@ -293,7 +310,14 @@ class Shoes::Slot
         slot = self
         super(*args) do |button, x, y|
           peer = Shoes::Compat.display_peer(slot)
-          blk.call(button, x, y) if peer.respond_to?(:contains?) && peer.contains?(x, y)
+          # Only Clogs' peers broadcast click/release app-wide and need a hit
+          # test; Scarpe's webview peers are backed by real DOM elements
+          # whose click events are already scoped to themselves.
+          if peer.respond_to?(:contains?)
+            blk.call(button, x, y) if peer.contains?(x, y)
+          else
+            blk.call(button, x, y)
+          end
         end
       end
     end
@@ -301,21 +325,63 @@ class Shoes::Slot
     # Hover and leave arrive as app-global "the hover target changed" events
     # with no coordinates; the pointer's position decides whether this slot
     # was entered or left.
-    %i[hover leave].each do |event|
-      define_method(event) do |*args, &blk|
-        return super(*args, &blk) unless blk
+    #
+    # On Clogs, dispatch for these two event names is not actually
+    # symmetric for widgets composed of nested slots (e.g. IconButton, which
+    # wraps its glyph in an inner `stack`): hit-testing on hover/leave finds
+    # whichever nested child peer is topmost at the pointer -- often not the
+    # exact slot `hover`/`leave` were called on -- so the "leave"-named
+    # dispatch reliably lands on a slot with no `leave` block bound and is a
+    # silent no-op, even though the matching "hover" dispatch (fired for the
+    # same transition, same misdirected target-resolution) still ends up
+    # reaching real bound handlers app-wide. Concretely: leave callbacks
+    # registered the normal way never fire, which left every IconButton's
+    # hover tooltip and highlight stuck on permanently once shown (visible
+    # as several stuck/overlapping tooltips after hovering multiple icons).
+    #
+    # Rather than depend on the "leave" dispatch, register both the hover
+    # and leave blocks on the "hover" channel, which does fire reliably,
+    # and detect the falling edge ourselves from shared was-inside state.
+    # `hover` sets up the single "hover"-channel dispatch a slot needs, the
+    # first time either `hover` or `leave` is called on it (idempotent) --
+    # `leave` reuses it via `hover(&nil)` rather than registering its own.
+    # No code in this app calls a bare `.hover` with no block expecting a
+    # plain getter/no-op, so folding that case into the same setup path is
+    # safe here.
+    define_method(:hover) do |*args, &blk|
+      slot = self
+      slot.instance_variable_set(:@shoes3_positional_hover_blk, blk) if blk
+      return self if slot.instance_variable_get(:@shoes3_positional_wrapped)
 
-        slot = self
-        was_inside = false
-        super(*args) do |*cb_args|
-          peer = Shoes::Compat.display_peer(slot)
-          _b, mx, my = peer&.app&.mouse_state
-          inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
-          fire = event == :hover ? inside && !was_inside : !inside && was_inside
-          was_inside = inside
-          blk.call(*cb_args) if fire
+      slot.instance_variable_set(:@shoes3_positional_wrapped, true)
+      super(*args) do |*cb_args|
+        peer = Shoes::Compat.display_peer(slot)
+        unless peer.respond_to?(:app)
+          slot.instance_variable_get(:@shoes3_positional_hover_blk)&.call(*cb_args)
+          next
+        end
+        _b, mx, my = peer.app&.mouse_state
+        inside = peer.respond_to?(:contains?) && mx && peer.contains?(mx, my)
+        was_inside = slot.instance_variable_get(:@shoes3_positional_inside) || false
+        slot.instance_variable_set(:@shoes3_positional_inside, inside)
+        if inside && !was_inside
+          slot.instance_variable_get(:@shoes3_positional_hover_blk)&.call(*cb_args)
+        elsif !inside && was_inside
+          slot.instance_variable_get(:@shoes3_positional_leave_blk)&.call(*cb_args)
         end
       end
+    end
+
+    define_method(:leave) do |*args, &blk|
+      return super(*args, &blk) unless blk
+
+      # Stash the block for `hover`'s wrapped closure to call on the falling
+      # edge; deliberately do NOT also register a "leave"-named dispatch --
+      # see the comment above for why that dispatch is a no-op. `hover(&nil)`
+      # just makes sure the shared "hover"-channel dispatch exists even if
+      # this slot never calls `hover` itself.
+      instance_variable_set(:@shoes3_positional_leave_blk, blk)
+      hover(&nil)
     end
   end
   prepend Shoes3PositionalEvents
@@ -396,8 +462,23 @@ class Shoes::Drawable
       Shoes::DisplayService.subscribe_to_event(event.to_s, linkable_id) do |*args|
         block.arity.zero? ? block.call : block.call(self, *args)
       end
+      # Subscribing is not enough on its own. A drawable that declares a
+      # `:click` style uses it to mean "I am clickable" -- Clogs' image asks
+      # for exactly that before it will accept a hit -- so a handler attached
+      # the Shoes 3 way has to set it too, or the display side never hit-tests
+      # the drawable and the subscription above is never fired. This is what
+      # made Hackety Hack's sidebar unclickable on every backend: its tab icons
+      # are `image(icon).hover{}.leave{}.click{}`, and the hit went to the
+      # enclosing slot instead.
+      self.click = block if event == :click && self.class.shoes_style_name?("click") && !click_style_set?
       self
     end
+  end
+
+  # `click` is both the style getter and the handler-attaching method above, so
+  # the style has to be read the long way round.
+  def click_style_set?
+    !instance_variable_get(:@click).nil?
   end
 
   # Shoes 3 lets any drawable be toggled or removed.
@@ -412,6 +493,38 @@ class Shoes::Drawable
   def show
     self.hidden = false
   end unless method_defined?(:show)
+
+  # Shoes 3 code that needs a drawable's real on-screen position (Hackety
+  # Hack's tooltip placement walks up the parent chain summing :left/:top)
+  # assumed every ancestor slot carried an explicit style, which broke on any
+  # flow-positioned ancestor -- there the style is simply unset, not 0. The
+  # display side already resolves a real absolute position every paint, for
+  # hit-testing (Clogs::Drawable#abs_x/#abs_y); expose that instead.
+  def absolute_left
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:abs_x) ? peer.abs_x : (left || 0)
+  end unless method_defined?(:absolute_left)
+
+  def absolute_top
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:abs_y) ? peer.abs_y : (top || 0)
+  end unless method_defined?(:absolute_top)
+
+  # `width`/`height` are plain shoes_styles -- a set value round-tripped back,
+  # never the actual rendered size. Shoes 3 could ask an auto-sized drawable
+  # (a `para` with no explicit :width) how wide its text came out; Lacci has
+  # no such report, so that style stays nil forever. The display side knows
+  # -- Clogs::Drawable#measure sets a real @width/@height every layout pass
+  # -- so read that instead. Before the first layout pass it is 0, not nil.
+  def measured_width
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:width) ? peer.width : (width || 0)
+  end unless method_defined?(:measured_width)
+
+  def measured_height
+    peer = Shoes::Compat.display_peer(self)
+    peer.respond_to?(:height) ? peer.height : (height || 0)
+  end unless method_defined?(:measured_height)
 end
 
 # Shoes 3's `image(width, height) { ... }` made an off-screen canvas to draw
@@ -701,4 +814,29 @@ rescue LoadError
 end
 
 # Slots that registered a `finish` block expect it to run on shutdown.
+#
+# Shoes 3 ran them while the app was still up. at_exit alone is too late for a
+# display library that takes its world down with the event loop: on wx, every
+# drawable call after that raises NameError, because the application object the
+# fonts and bitmaps belong to no longer exists. So they run as the app is
+# destroyed -- which is both closer to Shoes 3 and the only point at which they
+# can do anything -- and at_exit stays as the backstop for a block registered
+# after that, or by a program that never opened a window at all.
+#
+# Which App class that is depends on the backend: Clogs::App for every native
+# renderer, Scarpe::Webview::App under CLOGS_BACKEND=webview -- only one of
+# the two is ever loaded, so pick whichever answered.
+hh_app_class =
+  if defined?(Clogs::App)
+    Clogs::App
+  elsif defined?(Scarpe::Webview::App)
+    Scarpe::Webview::App
+  end
+hh_app_class&.prepend(Module.new do
+  def destroy
+    Shoes::Compat.run_finish_blocks unless @destroyed
+    super
+  end
+end)
+
 at_exit { Shoes::Compat.run_finish_blocks }

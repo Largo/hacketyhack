@@ -37,6 +37,72 @@ task :run do
   ruby "-Iclogs/lib -I. hacketyhack.rb"
 end
 
+namespace :qt do
+  desc "Build the Qt shim the qt backend drives (needs Qt 6's headers)"
+  task :build do
+    sh File.join(__dir__, "clogs", "ext", "qt", "build.sh")
+  end
+end
+
+namespace :nappgui do
+  desc "Build the NAppGUI shim (NAPPGUI_SRC=/path/to/a/built/nappgui_src)"
+  task :build do
+    sh File.join(__dir__, "clogs", "ext", "nappgui", "build.sh")
+  end
+end
+
+desc "Time a frame on every Clogs backend: rake compare"
+task :compare do
+  require "open3"
+
+  # Each row is a Shoes program plus the image it should put on the page. The
+  # control has no bitmap at all, so the image rows can be read as "what the
+  # picture costs on top of everything else".
+  cases = [
+    ["no image", "tools/bench_noimage.rb", nil],
+    ["16x16 icon", "tools/bench_image.rb", "static/tab-home.png"],
+    ["500x616 art", "tools/bench_image.rb", "static/hhhello.png"],
+    ["256x256 alpha art", "tools/bench_image.rb", "static/splash-hand.png"],
+    ["40 styled paragraphs", "tools/bench_text.rb", nil]
+  ]
+
+  backends = (ENV["BACKENDS"] || "libui fox wx qt gtk3 nappgui").split
+  results = {}
+  backends.each do |backend|
+    cases.each do |label, script, image|
+      env = { "CLOGS_BACKEND" => backend, "CLOGS_EXIT_AFTER_MS" => "5000" }
+      env["BENCH_IMAGE"] = image if image
+      err, = run_shoes(
+        [RbConfig.ruby, "-Iclogs/lib", "-I.", "-rtools/paint_bench", File.join(__dir__, script)],
+        env: env, run_ms: 5000, limit: 120
+      )
+      line = err.lines.find { |l| l.include?("frames=") }
+      results[[backend, label]] = line&.[](/p50=([\d.]+)ms/, 1)&.to_f
+      results[[backend, "#{label}/frames"]] = line&.[](/frames=(\d+)/, 1)&.to_i
+    end
+  end
+
+  puts
+  header = format("%-22s", "page") + backends.map { |b| format("%14s", "#{b} p50") }.join
+  puts header
+  puts "-" * header.length
+  base = backends.first
+  cases.each do |label, _script, _image|
+    row = format("%-22s", label)
+    backends.each do |backend|
+      ms = results[[backend, label]]
+      row += ms ? format("%11.2f ms", ms) : format("%14s", "?")
+    end
+    a = results[[base, label]]
+    slowest = backends.filter_map { |b| results[[b, label]] }.max
+    row += format("   (%.0fx spread)", slowest / backends.filter_map { |b| results[[b, label]] }.min) if a && slowest
+    puts row
+  end
+  puts
+  puts "p50 is the median time to paint the whole Shoes document, over a 5s run"
+  puts "with a 60fps animation driving the repaints. BACKENDS=\"libui wx\" to narrow."
+end
+
 desc "Boot the Hackety Hack IDE headlessly and check it builds its window"
 task :boot do
   err, ok = run_shoes([RbConfig.ruby, File.join(__dir__, "hacketyhack.rb")], run_ms: 2500, limit: 120)
@@ -217,3 +283,24 @@ KNOWN_SAMPLE_FAILURES = [
 ].freeze
 
 task default: [:samples, :boot]
+
+# The browser build. Everything it needs lives in web/, including its own
+# node_modules; these are here so `rake -T` mentions it at all.
+namespace :web do
+  desc "Build the browser bundle (web/dist)"
+  task :build do
+    sh "npm", "install", "--prefix", "web" unless File.directory?("web/node_modules")
+    sh "node", "web/build.mjs"
+  end
+
+  desc "Run Hackety Hack in a browser (http://localhost:4173)"
+  task serve: :build do
+    sh "node", "web/serve.mjs"
+  end
+
+  desc "Run the Playwright suite against the browser build"
+  task :test do
+    sh "npm", "install", "--prefix", "web" unless File.directory?("web/node_modules")
+    sh "npx", "--prefix", "web", "playwright", "test", chdir: "web"
+  end
+end

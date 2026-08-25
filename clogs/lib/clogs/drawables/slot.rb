@@ -19,6 +19,22 @@ module Clogs
       false
     end
 
+    # A slot only takes a click if something is listening for one.
+    #
+    # Drawables are clickable by default, which is right for a leaf and wrong
+    # for a container: slots routinely cover one another, so the topmost slot
+    # under the pointer wins the hit test whether or not it does anything with
+    # it, and whatever is beneath it never hears the click. Hackety Hack's
+    # whole sidebar was unreachable this way -- a full-window slot painted
+    # after it swallowed every click on a tab icon.
+    #
+    # Handlers on enclosing slots still fire: a release bubbles from the
+    # drawable that was pressed up through its parents, so a slot wrapping a
+    # clickable child hears about it either way.
+    def clickable?
+      !style(:click).nil?
+    end
+
     def padding
       @padding ||= Style.paddings(@styles)
     end

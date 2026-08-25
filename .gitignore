@@ -8,3 +8,22 @@ tags
 /dist/
 clogs/*.gem
 tmp/fuzz
+
+# Local bundler config (e.g. `bundle config set --local with fox`)
+.bundle/
+
+# The Qt backend's shim is built, not committed (clogs/ext/qt/build.sh)
+clogs/ext/qt/*.so
+clogs/ext/qt/*.dylib
+
+# The NAppGUI backend's shim is built, not committed
+# (clogs/ext/nappgui/build.sh)
+clogs/ext/nappgui/*.so
+clogs/ext/nappgui/*.dylib
+
+# The browser build: npm's tree, and the bundle build.mjs generates from the
+# repo's own Ruby.
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/

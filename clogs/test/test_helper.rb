@@ -6,15 +6,31 @@ require "minitest/autorun"
 require "clogs"
 
 module ClogsTest
-  # Anything that measures text needs libui initialised, which in turn needs a
-  # display. On CI that is Xvfb; locally it is whatever you are already using.
+  # Anything that measures text needs the display library initialised, which
+  # in turn needs a display. On CI that is Xvfb; locally it is whatever you are
+  # already using.
+  #
+  # This probes the capability rather than the display, because the backends
+  # differ on when they have it. libui, FOX, Qt and GTK3 can measure a string
+  # as soon as they have a display. wx cannot build a font until its
+  # application object is fully initialised, and NAppGUI cannot until
+  # osmain_imp has started its SDK -- both of which happen only inside the
+  # main loop. On those two these tests skip, and the sample suite covers that
+  # ground instead.
+  #
+  # Measurement has to be judged by its answer rather than by whether it
+  # raised: the NAppGUI backend reports a zero extent before its SDK is up
+  # instead of failing, which would otherwise read as a working measurement.
   def self.ui_available?
     return @ui_available unless @ui_available.nil?
 
     @ui_available = begin
-      Clogs::UI::L.init
-      true
-    rescue StandardError
+      Clogs::App.ensure_backend!
+      block = Clogs::TextBlock.new([Clogs::Run.new(text: "Hg", size: 12)], -1)
+      measured = block.width.to_f.positive? && block.height.to_f.positive?
+      block.free
+      measured
+    rescue StandardError, NameError
       false
     end
   end

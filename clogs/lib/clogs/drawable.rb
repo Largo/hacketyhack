@@ -60,6 +60,15 @@ module Clogs
     end
 
     def destroy_self
+      # Every peer binds three events to its own linkable id (above), and
+      # nothing was ever taking them back off. That went unnoticed while an
+      # animated program only ever drew one frame -- but a program that
+      # redraws itself with `clear` destroys and rebuilds its whole document
+      # every frame, and each dead peer left three handlers behind forever.
+      # Lacci's own unsubscribe walks every handler it knows about to find one
+      # by id, so the leak made each frame slower than the last: Arcs went from
+      # 1.3 to 5.4 seconds of work per second of animation inside five seconds.
+      unsub_all_shoes_events
       set_parent(nil)
       needs_layout!
     end

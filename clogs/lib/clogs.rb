@@ -10,14 +10,85 @@ Shoes::Log.instance = Clogs::Log.new
 Shoes::Log.configure_logger(ENV["SCARPE_DEBUG"] ? Shoes::Log::DEFAULT_DEBUG_LOG_CONFIG : Shoes::Log::DEFAULT_LOG_CONFIG)
 
 require_relative "clogs/version"
-require_relative "clogs/ui"
+
+module Clogs
+  # Which display library draws the pixels.
+  #
+  # `libui` is the default and the one Clogs was written against. The others
+  # exist because the libraries fail in different directions: libui has Cairo's
+  # compositing and transforms but no way to blit a bitmap, FOX blits bitmaps
+  # but has neither a transform stack nor an alpha channel, wx has both at the
+  # price of a much larger dependency, qt has both but has to carry its own C
+  # shim because Ruby has no maintained Qt binding at all, gtk3 is the library
+  # libui itself draws through on Linux reached without the wrapper, and
+  # nappgui is the smallest of the lot -- and the only one with no clipping,
+  # and wasm is not a native library at all: it is a browser canvas, reached
+  # from CRuby compiled to WebAssembly, so the same Shoes program runs in a
+  # page and can be driven by a browser automation harness.
+  # Select one with CLOGS_BACKEND; docs/backends.md has what each trade costs.
+  BACKENDS = %w[libui fox wx qt gtk3 nappgui wasm].freeze
+  DEFAULT_BACKEND = "libui"
+
+  def self.backend
+    @backend ||= begin
+      name = (ENV["CLOGS_BACKEND"] || DEFAULT_BACKEND).downcase
+      unless BACKENDS.include?(name)
+        raise ArgumentError, "Unknown CLOGS_BACKEND #{name.inspect}, expected one of #{BACKENDS.join(", ")}"
+      end
+
+      name
+    end
+  end
+
+  def self.libui?
+    backend == "libui"
+  end
+
+  def self.fox?
+    backend == "fox"
+  end
+
+  def self.wx?
+    backend == "wx"
+  end
+
+  def self.qt?
+    backend == "qt"
+  end
+
+  def self.gtk3?
+    backend == "gtk3"
+  end
+
+  def self.nappgui?
+    backend == "nappgui"
+  end
+
+  def self.wasm?
+    backend == "wasm"
+  end
+end
+
+# A backend supplies the drawing surface, the event source, text measurement
+# and the dialogs. Everything else -- layout, the drawable tree, the widgets
+# Clogs paints for itself -- is shared between them.
+#
+# libui's files predate the split and sit at the top of the tree; the others
+# live in a directory named for themselves.
+if Clogs.libui?
+  require_relative "clogs/ui"
+  require_relative "clogs/painter"
+  require_relative "clogs/text"
+  require_relative "clogs/canvas"
+  require_relative "clogs/dialogs"
+else
+  require_relative "clogs/#{Clogs.backend}/ui"
+  require_relative "clogs/#{Clogs.backend}/painter"
+  require_relative "clogs/#{Clogs.backend}/text"
+end
 require_relative "clogs/style"
-require_relative "clogs/painter"
-require_relative "clogs/text"
 require_relative "clogs/paragraph"
-require_relative "clogs/canvas"
 require_relative "clogs/clipboard"
-require_relative "clogs/dialogs"
 require_relative "clogs/drawable"
 
 # Clogs: Shoes, worn over libui.
@@ -39,6 +110,7 @@ module Clogs
     # libui takes a font *family* name and resolves it per platform.
     def default_font_family
       @default_font_family ||= case RUBY_PLATFORM
+      when /wasm/ then "sans-serif"
       when /darwin/ then "Helvetica"
       when /mingw|mswin/ then "Segoe UI"
       else "Sans"
@@ -55,6 +127,7 @@ module Clogs
 
     def monospace_font_family
       @monospace_font_family ||= case RUBY_PLATFORM
+      when /wasm/ then "monospace"
       when /darwin/ then "Monaco"
       when /mingw|mswin/ then "Consolas"
       else "Monospace"
@@ -72,6 +145,14 @@ require_relative "clogs/drawables/controls"
 require_relative "clogs/drawables/image"
 require_relative "clogs/drawables/misc"
 require_relative "clogs/app"
+
+# App and Image are the two classes that are part backend: the rest of each is
+# shared, so a backend reopens them rather than replacing the files.
+unless Clogs.libui?
+  require_relative "clogs/#{Clogs.backend}/app"
+  require_relative "clogs/#{Clogs.backend}/image"
+end
+
 require_relative "clogs/display_service"
 require_relative "clogs/lacci_compat"
 

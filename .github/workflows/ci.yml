@@ -79,3 +79,244 @@ jobs:
 
       - name: Boot the IDE
         run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+  fox:
+    name: Clogs on the FOX backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # FXRuby is a C++ extension rather than a prebuilt binary, so FOX 1.6's
+      # headers have to be here before bundle install. libxrandr-dev is not
+      # named by the build but the link step fails without it.
+      - name: Install FOX and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfox-1.6-dev libxrandr-dev libxi-dev \
+                                  libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config set --local with fox
+          bundle install --jobs 4
+
+      # The point of the second backend is that it runs the same programs, so
+      # it is held to the same two checks as libui rather than to a suite of
+      # its own. See clogs/docs/fox_vs_libui.md.
+      - name: Run the bundled Shoes samples on FOX
+        env:
+          CLOGS_BACKEND: fox
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on FOX
+        env:
+          CLOGS_BACKEND: fox
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on FOX
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: fox
+        run: |
+          bundle config set --local with fox
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+  wx:
+    name: Clogs on the wx backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # wxRuby3 is SWIG-generated C++ and compiles against wxWidgets 3.2's
+      # headers. The webview and media packages are separate on Debian and
+      # Ubuntu, and the gem does not name them, but the link step needs both.
+      - name: Install wxWidgets and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwxgtk3.2-dev libwxgtk-webview3.2-dev \
+                                  libwxgtk-media3.2-dev swig doxygen \
+                                  libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config set --local with wx
+          bundle install --jobs 4
+
+      # wxRuby3 1.8.1 does not link against a distribution's own wxWidgets:
+      # `wx-config --ld` answers "g++ -o", and the gem appends its own
+      # "-o target" at the end of the link line, so that leading -o swallows
+      # the soname flag and no shared object is produced. See
+      # clogs/docs/backends.md.
+      - name: Patch wxRuby3's link flags, then build it
+        run: |
+          gem_dir=$(bundle show wxruby3)
+          sed -i 's|@ld          = wx_config("--ld")|@ld          = wx_config("--ld").sub(/\\s+-o\\s*\\z/, "")|' \
+            "$gem_dir/rakelib/lib/config/unixish.rb"
+          (cd "$gem_dir" && rake -m wxruby:gem:setup)
+
+      - name: Run the bundled Shoes samples on wx
+        env:
+          CLOGS_BACKEND: wx
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on wx
+        env:
+          CLOGS_BACKEND: wx
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+  qt:
+    name: Clogs on the Qt backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # Ruby has no maintained Qt binding, so this backend builds its own C
+      # shim over Qt 6 and drives it through Fiddle. See
+      # clogs/docs/backends.md.
+      - name: Install Qt 6 and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev libgtk-3-0 xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+
+      - name: Build the Qt shim
+        run: bundle exec rake qt:build
+
+      - name: Run the bundled Shoes samples on Qt
+        env:
+          CLOGS_BACKEND: qt
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on Qt
+        env:
+          CLOGS_BACKEND: qt
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on Qt
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: qt
+        run: |
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+  gtk3:
+    name: Clogs on the GTK3 backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # ruby-gnome builds against GTK 3's development files. The runtime GTK is
+      # already needed by the default backend, so this only adds the headers.
+      - name: Install GTK 3 and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev xvfb xauth
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config set --local with gtk3
+          bundle install --jobs 4
+
+      - name: Run the bundled Shoes samples on GTK3
+        env:
+          CLOGS_BACKEND: gtk3
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on GTK3
+        env:
+          CLOGS_BACKEND: gtk3
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on GTK3
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: gtk3
+        run: |
+          bundle config set --local with gtk3
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test
+
+  nappgui:
+    name: Clogs on the NAppGUI backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # NAppGUI is not packaged by any distribution, so it is built from
+      # source; its GTK backend needs GTK 3's headers and libcurl. Like Qt,
+      # this backend drives its own C shim through Fiddle -- but for a
+      # different reason: NAppGUI's osmain macro wants to own main(). See
+      # clogs/docs/backends.md.
+      - name: Install NAppGUI's build dependencies and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libcurl4-openssl-dev cmake \
+                                  xvfb xauth
+
+      - name: Build NAppGUI from source
+        run: |
+          git clone --depth 1 https://github.com/frang75/nappgui_src ../nappgui_src
+          cmake -S ../nappgui_src -B ../nappgui_src/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build ../nappgui_src/build --parallel
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install --jobs 4
+
+      - name: Build the NAppGUI shim
+        env:
+          NAPPGUI_SRC: ../nappgui_src
+        run: bundle exec rake nappgui:build
+
+      - name: Run the bundled Shoes samples on NAppGUI
+        env:
+          CLOGS_BACKEND: nappgui
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake samples
+
+      - name: Boot the IDE on NAppGUI
+        env:
+          CLOGS_BACKEND: nappgui
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake boot
+
+      - name: Clogs' own suite on NAppGUI
+        working-directory: clogs
+        env:
+          CLOGS_BACKEND: nappgui
+        run: |
+          bundle install --jobs 4
+          xvfb-run -a --server-args="-screen 0 1024x768x24" bundle exec rake test

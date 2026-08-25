@@ -43,13 +43,43 @@ bundle install
 ruby hacketyhack.rb    # the IDE
 rake samples           # the bundled Shoes programs, headless
 rake boot              # IDE smoke test
+rake compare           # time a frame on every Clogs backend
 ```
 
-Six of the twelve Shoes programs in `samples/` run unmodified — `Clock`,
-`Scribble`, `Pong`, `Duel`, `Follow` and `Arcs` — exercising animation,
-`clear`/redraw, mouse input, art drawables and styled text. `rake samples`
-lists the rest rather than hiding them; they need Shoes 3 off-screen `image`
-canvases, `download`, or Hackety Hack's turtle widgets.
+Clogs has six interchangeable native display backends: libui (the default), FOX
+via FXRuby, wxWidgets via wxRuby3, Qt through a small C shim this repo carries
+(Ruby has no maintained Qt binding), GTK3 via ruby-gnome, and NAppGUI through a
+second shim. All six boot the IDE and pass the same 11 of the 12 samples. They differ in what a frame costs,
+mostly because libui cannot blit a bitmap and has to paint pictures as
+rectangles:
+
+| median frame | libui | fox | wx | qt | gtk3 | nappgui |
+|---|---|---|---|---|---|---|
+| the splash hand, 256x256 with alpha | 18.75 ms | 0.19 ms | 0.46 ms | 0.59 ms | 0.54 ms | 0.57 ms |
+| 40 styled paragraphs | 50.87 ms | 9.11 ms | 52.05 ms | 14.24 ms | 34.90 ms | 16.80 ms |
+
+The libui and gtk3 columns are the same Cairo and the same Pango -- on Linux
+libui is a thin C wrapper over exactly them -- so that 35x is the wrapper, not
+the stack. Qt draws the best frame overall, wx is the most portable of the
+alternatives, FOX is faster than any of them but loses antialiasing and alpha,
+NAppGUI keeps pace with Qt and gtk3 out of a 3 MB SDK but has no character in
+its key event, and libui stays the default because it is the only one that
+installs without a compiler. `rake compare` reproduces the table, and the trade-offs are in
+[`clogs/docs/backends.md`](clogs/docs/backends.md).
+
+Eleven of the twelve Shoes programs in `samples/` run unmodified on every
+backend — `Clock`, `Scribble`, `Pong`, `Duel`, `Follow`, `Arcs`, `Fractal`,
+`Funnies`, `Animated Flowers` and both `Turtle` programs — exercising
+animation, `clear`/redraw, mouse input, art drawables, turtle widgets and
+styled text. `rake samples` names the twelfth rather than hiding it:
+`Guessing Game` is a bare `ask` loop with nobody headless to answer it.
+
+Three of them only started *drawing* once the browser build made it easy to
+look: `animate { clear { ... } }` — how every Shoes animation is written —
+destroyed the subscription driving it, so `Clock`, `Arcs` and
+`Animated Flowers` each painted one frame and froze; and a `shape { arc ... }`
+never drew what was inside it. Both were fixed in Clogs, and both were fixed on
+every backend at once.
 
 Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 `lib/compat/shoes3.rb`:
@@ -71,9 +101,45 @@ Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 Hpricot, which has not built since 2010, is replaced by a Nokogiri shim, and
 the dead hackety.org version check no longer crashes startup.
 
-**Still rough.** The editor tab is not usable yet, the online features point at
-a server that no longer exists, and large images are expensive to draw — see
-the note on libui and bitmaps in the coverage matrix.
+**Still rough.** The editor tab takes text now -- typing, backspace, newlines,
+and the Save button appearing when there is something to save -- but it is not
+finished, and the online features point at a server that no longer exists. Large images are expensive to draw on the
+default backend — see the note on libui and bitmaps in the coverage matrix, and
+`CLOGS_BACKEND=wx` for the version of Clogs that does not have that problem.
+
+## In a browser
+
+There is a seventh backend, and it is not a library: `CLOGS_BACKEND=wasm` paints
+the same Shoes document onto an HTML canvas, with CRuby itself compiled to
+WebAssembly and running in the page.
+
+```
+cd web
+npm install
+npm run serve      # http://localhost:4173 -- the IDE
+npm test           # 30 Playwright tests
+```
+
+The app is not ported. `app/`, `lib/`, `samples/` and `lessons/` are shipped
+byte for byte into a filesystem the browser holds in memory, so a bug you find
+in the browser is the bug the desktop app has -- which is the point. Clogs
+paints everything into one canvas, so there is nothing for Playwright to
+select; the page exposes the drawable tree instead, and the frame clock, so a
+test reads the words on screen, clicks them by name, and advances the app's own
+time rather than racing it:
+
+```js
+const app = await bootIDE(page);
+await app.clickText("Samples");
+await app.advance(500);
+expect(await app.texts()).toContain("Clock");
+```
+
+The IDE boots, the side tabs work, the editor takes typed text, and eleven of
+the twelve samples run -- the same eleven as every native backend. See
+[`web/README.md`](web/README.md) for the harness and
+[`clogs/docs/backends.md`](clogs/docs/backends.md#the-seventh-one-is-not-a-library)
+for what a browser gives up (sockets, file pickers, preemptive threads).
 
 ## Development
 
@@ -82,6 +148,35 @@ bundle install
 rake samples                                  # the Shoes samples, headless
 cd clogs && rake test                         # Clogs' own suite
 ruby -Iclogs/lib clogs/examples/kitchen_sink.rb
+
+# The alternative backends are optional; each needs its toolkit's headers.
+sudo apt-get install libfox-1.6-dev libxrandr-dev            # for fox
+sudo apt-get install libwxgtk3.2-dev libwxgtk-webview3.2-dev \
+                     libwxgtk-media3.2-dev swig doxygen      # for wx
+bundle config set --local with "fox wx" && bundle install
+CLOGS_BACKEND=wx rake samples
+
+sudo apt-get install qt6-base-dev                            # for qt
+rake qt:build                                                # builds the shim
+CLOGS_BACKEND=qt rake samples
+
+sudo apt-get install libgtk-3-dev                            # for gtk3
+bundle config set --local with gtk3 && bundle install
+CLOGS_BACKEND=gtk3 rake samples
+
+sudo apt-get install libcurl4-openssl-dev cmake              # for nappgui
+git clone --depth 1 https://github.com/frang75/nappgui_src ../nappgui_src
+cmake -S ../nappgui_src -B ../nappgui_src/build -DCMAKE_BUILD_TYPE=Release
+cmake --build ../nappgui_src/build --parallel
+NAPPGUI_SRC=../nappgui_src rake nappgui:build                # builds the shim
+CLOGS_BACKEND=nappgui rake samples
+
+rake compare                                                 # all six, timed
+SHOT_DIR=tmp/shots CLOGS_BACKEND=qt ruby -Iclogs/lib -I. tools/screenshots.rb
+
+cd web && npm install                                        # the browser build
+npm run serve                                                # needs no toolkit at all
+npm test
 ```
 
 On a headless machine, prefix GUI commands with `xvfb-run -a`.

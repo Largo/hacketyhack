@@ -1,0 +1,20 @@
+{
+  "name": "hacketyhack-web",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
+    "@playwright/test": "^1.62.1",
+    "@ruby/4.0-wasm-wasi": "^2.10.1",
+    "@ruby/wasm-wasi": "^2.10.1",
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node build.mjs && node serve.mjs",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui"
+  }
+}

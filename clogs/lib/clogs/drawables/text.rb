@@ -71,9 +71,9 @@ module Clogs
 
   class Del < TextDrawable
     # libui's attributed strings have no strikethrough attribute exposed by the
-    # Ruby binding, so del() renders as plain text. Documented in the coverage
-    # matrix rather than silently pretending.
-    def style_for_tag(base) = base
+    # Ruby binding, so on that backend del() still renders as plain text. The
+    # FOX backend draws its own text run by run and so can draw the line.
+    def style_for_tag(base) = base.with(strike: true)
   end
 
   class Sub < TextDrawable

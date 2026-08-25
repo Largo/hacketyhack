@@ -4,9 +4,10 @@ require_relative "ui"
 
 module Clogs
   # One styled run of text inside a paragraph.
-  Run = Struct.new(:text, :size, :color, :family, :bold, :italic, :underline, :owner, keyword_init: true) do
+  Run = Struct.new(:text, :size, :color, :family, :bold, :italic, :underline, :strike, :owner,
+    keyword_init: true) do
     def style_key
-      [size, color, family, bold, italic, underline]
+      [size, color, family, bold, italic, underline, strike]
     end
   end
 

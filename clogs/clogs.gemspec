@@ -37,4 +37,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency "libui", "~> 0.2"
   # Pure-Ruby PNG decoding, because libui cannot load an image file itself.
   spec.add_dependency "chunky_png", "~> 1.4"
+
+  # The optional backends (CLOGS_BACKEND=fox, CLOGS_BACKEND=wx) additionally
+  # need fxruby or wxruby3, and neither is a dependency on purpose: both are
+  # C++ extensions that have to compile against their toolkit's headers, where
+  # libui ships prebuilt binaries for every platform. Install one yourself to
+  # use that backend; see docs/backends.md.
 end

@@ -50,18 +50,23 @@ class IconButton < Shoes::Widget
       end
     end
 
-    click &blk
+    if ENV["HH_DEBUG_CLICKS"]
+      tt = @tooltip_text
+      click do |*a|
+        $stderr.puts "[HH_DEBUG_CLICKS] #{tt.inspect} button clicked, bounds: left=#{absolute_left} top=#{absolute_top} width=#{width} height=#{height}, app width=#{app.width} height=#{app.height}"
+        blk&.call(*a)
+      end
+    else
+      click &blk
+    end
   end
   
   def create_tooltip
     slot = parent
-    x, y = left, top
-    while not slot.respond_to? :tooltip
-      x += slot.left
-      y += slot.top
-      slot = slot.parent
-    end
+    slot = slot.parent until slot.respond_to? :tooltip
 
+    x = absolute_left - slot.absolute_left
+    y = absolute_top - slot.absolute_top
     @tooltip = slot.tooltip(@tooltip_text, x, y-20, "#f00", :stroke => white)
   end
 
@@ -104,7 +109,11 @@ module HH::Tooltip
             p1 = para str, opts
           end
           timer 0 do
-            bg.width = p1.width
+            # p1 may not have gone through a layout pass yet, in which case
+            # its measured width is 0 -- keep bg's construction-time width
+            # rather than shrinking the pill to nothing.
+            w = p1.measured_width
+            bg.width = w if w && w > 0
             if slot.width < s.left + bg.width
               s.left -= s.left + bg.width - slot.width
             end
@@ -176,8 +185,18 @@ module HH::Widgets
     @r = star :top => 410, :left => 310, :outer => 80, :inner => 100
     @s =
       stack :top => -400, :left => 100, :width => 370, :height => 370 do
-        @mask = mask do
-          star 210, 210, 130, 500, 90
+        # Scarpe's webview `mask` rebuilds an SVG clip-path with JS run
+        # through the page's own eval() on every redraw; something in that
+        # path breaks with a JS engine syntax error on the very JS Scarpe
+        # itself generates (reproduced outside Hackety Hack entirely, so
+        # it's not one of this app's shims) and the mask never finishes
+        # applying. Skip it there -- like Clogs, where mask is a documented
+        # no-op -- and show the hand unclipped rather than spend every
+        # frame on a mask update that cannot succeed.
+        unless defined?(Scarpe::Webview::App)
+          @mask = mask do
+            star 210, 210, 130, 500, 90
+          end
         end
         image "#{HH::STATIC}/splash-hand.png", :top => 84, :left => 84
       end
@@ -195,7 +214,7 @@ module HH::Widgets
     # @v = video "music.wav",
     #       :autoplay => true, :width => 0, :height => 0, :top => -100, :left => -100
     @an = animate(30) do |i|
-      @mask.clear do
+      @mask&.clear do
         rotate 1
         star 210, 210, 130, 500, 90
       end
@@ -208,6 +227,13 @@ module HH::Widgets
         @s.top += dist
         if @s.top > -40
           @t.stroke = gray(@s.top + 55)
+          # Scarpe's webview always sets an explicit CSS color on span/
+          # strong runs -- even an unset one, which resolves to fully
+          # transparent rather than inheriting the parent paragraph's
+          # color the way Clogs' text runs do -- so the "Welcome to" /
+          # "Hackety Hack" runs need their own color driven alongside the
+          # title's to fade in at all.
+          @t.contents.each { |c| c.stroke = @t.stroke if c.respond_to?(:stroke=) }
         end
       else
         if @v
