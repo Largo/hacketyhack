@@ -54,7 +54,7 @@ lesson_set "Beginner Data Structures" do
          "gotten by typing the array's variable name(my_array) and square brackets( [] ) with a number ",
          "inside of the brackets.  This number can be thought of as the address to that spot in the array.  ",
          "It's good to remember that arrays start at 0 in Ruby."
-    embed_code 'alert a[0]'
+    embed_code 'alert my_array[0]'
     para "What thing in the array are you going to get back?  Type this in and press the 'Run' button."
   end
 

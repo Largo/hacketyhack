@@ -38,7 +38,7 @@ lesson_set "Fun with Arrays" do
 
     para "You can save an array in a variable, like this:"
 
-    embed_code 'my_array = [1,99,"shoes",doggy, ["apple"","pear"]]'
+    embed_code 'my_array = [1,99,"shoes",doggy, ["apple","pear"]]'
 
     para "Arrays can hold all kinds of data! You get the items out by calling an object's key."
 
@@ -46,7 +46,7 @@ lesson_set "Fun with Arrays" do
 	  embed_code 'alert my_array[1] returns 2, which is also a number'
 	  embed_code 'alert my_array[2] returns "shoes", which is a string'
 	  embed_code 'alert my_array[3] returns doggy, which is a variable'
-	  embed_code 'alert my_array[4] returns ["apple"","pear"], which is another array!'
+	  embed_code 'alert my_array[4] returns ["apple","pear"], which is another array!'
 
     para "You can try typing in your own array and returning values until you get the hang of it."
   end

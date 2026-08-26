@@ -230,6 +230,17 @@ module Clogs
         }
         text = drawable_text(peer)
         node[:text] = text if text && !text.empty?
+        # A paragraph's box is as wide as the slot allows, not as wide as its
+        # words: `para "Data Types", :width => 280` is a 280-wide drawable with
+        # 66 pixels of ink in it, and the middle of that box is empty space
+        # where a click hits nothing. Report where the ink actually is -- both
+        # edges, since `:align => "center"` puts it somewhere other than the
+        # left -- so aiming at a drawable means aiming at what you can see.
+        left, width = ink_box(peer)
+        if width && node[:width] && width < node[:width]
+          node[:inkLeft] = left
+          node[:inkWidth] = width
+        end
         node[:clickable] = true if peer.respond_to?(:clickable?) && peer.clickable?
         kids = peer.respond_to?(:children) ? peer.children : nil
         node[:children] = kids.map { |k| describe_drawable(k) } if kids && !kids.empty?
@@ -261,6 +272,22 @@ module Clogs
           nested = DisplayService.instance&.query_display_drawable_for(item, nil_ok: true)
           nested ? drawable_text(nested).to_s : item.to_s
         end.join
+      end
+
+      # Where the text actually sits inside the drawable's box, as [left,
+      # width], for drawables that lay text out. Taken from the placed words
+      # rather than from the paragraph's own width, because alignment moves
+      # them and the paragraph's width does not say where they went.
+      def ink_box(peer)
+        paragraph = peer.instance_variable_get(:@paragraph)
+        return [nil, nil] unless paragraph.respond_to?(:placed)
+
+        placed = paragraph.placed.reject { |item| item.text.to_s.strip.empty? }
+        return [nil, nil] if placed.empty?
+
+        left = placed.map(&:x).min
+        right = placed.map { |item| item.x + item.width }.max
+        [round(left), round(right - left)]
       end
 
       def round(value)

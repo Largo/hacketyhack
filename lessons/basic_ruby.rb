@@ -151,7 +151,7 @@ lesson_set "3: Basic Ruby" do
          "was because there was an error. You can see any errors that run by hitting ",
          "either Alt-/ or Command-/, depending on what kind of computer you're using."
     para "The error that results from ", code('alert "hey" + 2'), " is "
-    embed_code "can't convert Fixnum into String"
+    embed_code "no implicit conversion of Integer into String"
     para "What is that?"
   end
 
@@ -170,9 +170,9 @@ lesson_set "3: Basic Ruby" do
     para "That's why"
     embed_code 'alert "hey" + 2'
     para 'doesn\'t really work: "hey" is a ', code("String"), " object, and 2 is a ",
-         code("Fixnum"), " object. And adding ", code("String"), "s and ",
-         code("Fixnum"), "s doesn't make any sense. We can make this code work, though!"
-    para "All we need to do is turn the ", code("Fixnum"), " into a ", code("String"),
+         code("Integer"), " object. And adding ", code("String"), "s and ",
+         code("Integer"), "s doesn't make any sense. We can make this code work, though!"
+    para "All we need to do is turn the ", code("Integer"), " into a ", code("String"),
          ". We can do this by using the ", code("to_s"), " method."
     embed_code 'alert "hey" + 2.to_s'
   end
@@ -181,7 +181,7 @@ lesson_set "3: Basic Ruby" do
     embed_code 'alert "hey" + 2.to_s'
     para "Okay, this isn't bad. We have our ", code("alert"), " method. We're giving it ",
          code('"hey" + 2.to_s'), ". The ", code("2.to_s"), " turns a ",
-         code("Fixnum"), " 2, which is like the mathematical idea of a 2, into the ",
+         code("Integer"), " 2, which is like the mathematical idea of a 2, into the ",
          code("String"), " 2, which is like when you write a 2 down on a piece of ",
          "paper."
   end

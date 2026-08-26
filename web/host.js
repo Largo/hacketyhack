@@ -526,9 +526,13 @@
       (function walk(node) {
         if (!node) return;
         if (matches(node) && node.width > 0 && node.height > 0) {
+          // Aim at the words, not at the middle of the box they sit in --
+          // see inkLeft/inkWidth in Clogs::Wasm::Runtime#describe_drawable.
+          const inkLeft = node.inkLeft !== undefined ? node.inkLeft : 0;
+          const inkWidth = node.inkWidth !== undefined ? node.inkWidth : node.width;
           hits.push(Object.assign({}, node, {
             children: undefined,
-            centerX: node.x + node.width / 2,
+            centerX: node.x + inkLeft + inkWidth / 2,
             centerY: node.y + node.height / 2,
           }));
         }

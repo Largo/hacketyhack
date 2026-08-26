@@ -71,7 +71,7 @@ lesson_set "Data Types" do
          strong("interpolation"), ". It kinda means 'put into.' See if this ",
          "makes sense:"
     embed_code 'first_name = "Steve"' + "\n" +
-               'alert "The first name is #{first_name}".'
+               'alert "The first name is #{first_name}"'
     para "Whoah! What's up with that? Try running it, and see what it does."
   end
   

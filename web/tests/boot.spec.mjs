@@ -54,7 +54,13 @@ test.describe("the automation surface", () => {
     expect(ready).toBeTruthy();
     expect(ready.x).toBeGreaterThan(0);
     expect(ready.y).toBeGreaterThan(0);
-    expect(ready.centerX).toBeCloseTo(ready.x + ready.width / 2, 5);
+
+    // The point to aim at is on the words, which is not the middle of the box
+    // when a paragraph is wider than its text or centres it -- but it is
+    // always inside the box.
+    expect(ready.centerX).toBeGreaterThanOrEqual(ready.x);
+    expect(ready.centerX).toBeLessThanOrEqual(ready.x + ready.width);
+    expect(ready.centerY).toBeCloseTo(ready.y + ready.height / 2, 5);
 
     // Clogs answers "what is under this point" from the same numbers, so the
     // tree and the hit testing cannot drift apart without a test noticing.

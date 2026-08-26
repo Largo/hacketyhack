@@ -34,6 +34,7 @@ module Clogs
       s = s.with(family: style(:family)) if style(:family)
       s = s.with(underline: true) if truthy_underline?
       s = s.with(italic: true) if style(:emphasis).to_s == "italic"
+      s = s.with(bold: style(:font_weight).to_s == "bold") if style(:font_weight)
       s.with(owner: self)
     end
 

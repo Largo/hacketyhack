@@ -166,6 +166,20 @@ Shoes::Slot.shoes_styles(:click) unless Shoes::Slot.shoes_style_name?(:click)
   end
 end
 
+# Shoes 3 styles a run of text bold with `:weight => "bold"`, which the Shoes 3
+# compatibility layer rewrites to Lacci's `:font_weight` -- but only for classes
+# that declare it, and Lacci declares it on Shoes::Para and not on the inline
+# text drawables. So `span("size", :weight => "bold")` was dropped with a
+# warning, which is how Hackety Hack's syntax highlighting lost the bold on
+# every method name, constant and class name it colours, in the editor and in
+# the lessons alike.
+%w[Span Link Em Strong Code Del Ins Sub Sup Bg Fg].each do |name|
+  next unless Shoes.const_defined?(name)
+
+  klass = Shoes.const_get(name)
+  klass.shoes_styles(:font_weight) unless klass.shoes_style_name?(:font_weight)
+end
+
 # Lacci pairs `border` with a real Shoes::Border drawable, but `background`
 # only records a `background_color` style on the slot and drops its options
 # hash -- so no display drawable is ever created and nothing gets painted.
