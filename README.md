@@ -108,6 +108,11 @@ Getting here meant fixing real divergences between Shoes 3 and Lacci, all in
 Hpricot, which has not built since 2010, is replaced by a Nokogiri shim, and
 the dead hackety.org version check no longer crashes startup.
 
+Slots scroll: `stack :scroll => true` clips, draws a bar, follows the wheel and
+can be dragged, which is what the lesson pane and the editor's code area have
+always asked for. The side tabs are bigger targets than the 16 pixels their
+artwork happens to be.
+
 **Still rough.** The editor tab takes text now -- typing, backspace, newlines,
 and the Save button appearing when there is something to save -- but it is not
 finished, and the online features point at a server that no longer exists. Large images are expensive to draw on the
@@ -124,7 +129,7 @@ WebAssembly and running in the page.
 cd web
 npm install
 npm run serve      # http://localhost:4173 -- the IDE
-npm test           # 49 Playwright tests
+npm test           # 55 Playwright tests
 ```
 
 The app is not ported. `app/`, `lib/`, `samples/` and `lessons/` are shipped

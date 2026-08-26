@@ -120,6 +120,13 @@ export async function bootApp(page, {
       await app.settle();
     },
 
+    // Turn the wheel over a point. Like every other input, it lands on the
+    // next frame.
+    wheel: async (x, y, amount, windowId = 1) => {
+      await page.evaluate(([px, py, a, id]) => window.clogs.wheel(px, py, a, id), [x, y, amount, windowId]);
+      await app.settle();
+    },
+
     key: async (name, windowId = 1, modifiers = 0) => {
       await page.evaluate(([n, id, m]) => window.clogs.key(n, id, m), [name, windowId, modifiers]);
       await app.settle();

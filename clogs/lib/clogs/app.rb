@@ -270,6 +270,11 @@ module Clogs
       @mouse_state = [event.button_down? ? 1 : 0, event.x.round, event.y.round]
       Shoes::DisplayService.mouse_state = @mouse_state if Shoes::DisplayService.respond_to?(:mouse_state=)
 
+      if @dragging_scrollbar
+        drag_scrollbar(@dragging_scrollbar, event.y)
+        return
+      end
+
       update_hover(event)
       notify_subscribers("motion", event.x.round, event.y.round,
         event.modifiers.anybits?(UI::MOD_CTRL), event.modifiers.anybits?(UI::MOD_SHIFT))
@@ -284,6 +289,14 @@ module Clogs
     end
 
     def handle_press(event)
+      # The scrollbar takes the press before anything under it does.
+      bar = scrollbar_at(event.x, event.y)
+      if bar
+        @dragging_scrollbar = bar
+        drag_scrollbar(bar, event.y)
+        return
+      end
+
       # A click outside an open drop-down closes it.
       open_list_boxes.each { |lb| lb.close unless lb.contains?(event.x, event.y) || lb.overlay_contains?(event.x, event.y) }
 
@@ -296,6 +309,11 @@ module Clogs
     end
 
     def handle_release(event)
+      if @dragging_scrollbar
+        @dragging_scrollbar = nil
+        return
+      end
+
       # Shoes bubbles a click up through the enclosing slots: clicking the
       # text inside a button-like widget still fires the widget's handler.
       peer = @pressed
@@ -378,6 +396,43 @@ module Clogs
       mods << "alt" if event.alt?
       mods << "shift" if event.shift? && base.length > 1
       mods.empty? ? base : (mods + [base]).join("_")
+    end
+
+    # A wheel turn goes to the innermost scrolling slot under the pointer, and
+    # falls through to the one outside it when that slot is already at its end
+    # -- which is what makes a scrolling pane inside a scrolling page behave
+    # the way people expect.
+    def on_wheel(x, y, amount)
+      return false if @destroyed
+
+      peers_at(x, y).reverse.each do |peer|
+        next unless peer.respond_to?(:scroll_by)
+        return true if peer.scroll_by(amount)
+      end
+      false
+    rescue StandardError => e
+      report_error(e)
+      false
+    end
+
+    # Pressing on a scrollbar starts a drag; the slot being dragged is
+    # remembered so the pointer can leave the bar without losing it.
+    def scrollbar_at(x, y)
+      peers_at(x, y).reverse.find do |peer|
+        peer.respond_to?(:scrollbar_rect) && (rect = peer.scrollbar_rect) &&
+          x >= rect[0] && x < rect[0] + rect[2] && y >= rect[1] && y < rect[1] + rect[3]
+      end
+    end
+
+    def drag_scrollbar(peer, y)
+      return unless peer
+
+      _tx, _ty, _tw, thumb_height = peer.thumb_rect
+      travel = peer.height - thumb_height
+      return if travel <= 0
+
+      offset = y - peer.abs_y - thumb_height / 2.0
+      peer.scroll_top = peer.max_scroll * (offset / travel)
     end
 
     def on_crossed(left)

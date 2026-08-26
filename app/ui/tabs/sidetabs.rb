@@ -1,6 +1,16 @@
 class HH::SideTabs
   include HH::Observable
+
+  # A 16-pixel target is a small thing to hit with a mouse, and on a dense
+  # display it is physically tiny. The artwork is 16 pixels square -- that is
+  # all there is of it -- but it is drawn at ICON_TARGET, which makes the
+  # thing you click two and a half times the area it was, in a row with room
+  # around it. The cost is a mild softness from the upscale, which a dense
+  # display was applying to the 16-pixel version anyway.
   ICON_SIZE = 16
+  ICON_TARGET = 26
+  TAB_HEIGHT = 38
+  SIDEBAR_WIDTH = 48
   HOVER_WIDTH = 140
   def initialize slot, dir
     @slot, @directory = slot, dir
@@ -11,21 +21,26 @@ class HH::SideTabs
     width = HOVER_WIDTH;
     append_to @slot do
       tip = nil
-      right = stack :margin_left => 38, :height => 1.0
-      left = stack :top => 0, :left => 0, :width => 38, :height => 1.0 do
+      right = stack :margin_left => SIDEBAR_WIDTH, :height => 1.0
+      left = stack :top => 0, :left => 0, :width => SIDEBAR_WIDTH, :height => 1.0 do
         tip = stack :top => 0, :left => 0, :width => width, :margin => 4,
                     :hidden => true do
           background "#F7A", :curve => 6
-          para "HOME", :margin => 3, :margin_left => 40, :stroke => white
+          # Clear of the icon column *and* of the highlight a hovered row
+          # draws behind its icon, which is as wide as the column and paints
+          # after this does. Widening the sidebar has to move the label along
+          # with it or the first letter disappears under the highlight.
+          para "HOME", :margin => 3, :margin_left => SIDEBAR_WIDTH + 6,
+               :stroke => white
         end
         # colored background
-        background "#cdc", :width => 38
-        background "#dfa", :width => 36
-        background "#fda", :width => 30
-        background "#daf", :width => 24
-        background "#aaf", :width => 18
-        background "#7aa", :width => 12
-        background "#77a", :width => 6
+        background "#cdc", :width => SIDEBAR_WIDTH
+        background "#dfa", :width => SIDEBAR_WIDTH - 2
+        background "#fda", :width => SIDEBAR_WIDTH - 9
+        background "#daf", :width => SIDEBAR_WIDTH - 16
+        background "#aaf", :width => SIDEBAR_WIDTH - 23
+        background "#7aa", :width => SIDEBAR_WIDTH - 30
+        background "#77a", :width => SIDEBAR_WIDTH - 37
       end
       sidetabs.instance_eval{@left, @right, @tip = left, right, tip}
     end
@@ -45,7 +60,7 @@ class HH::SideTabs
     tab[:hover] ||= symbol.to_s
     
     pos = tab[:position]
-    pixelpos = @n_tabs[pos] * (ICON_SIZE + 10)
+    pixelpos = @n_tabs[pos] * TAB_HEIGHT
     @n_tabs[pos] += 1
     hover = tab[:hover]
     icon_path = HH::STATIC + "/" + tab[:icon]
@@ -54,10 +69,21 @@ class HH::SideTabs
       opentab symbol
     end
     width = HOVER_WIDTH+22;
+    inset = ((SIDEBAR_WIDTH - ICON_TARGET) / 2.0).round
+    top_inset = ((TAB_HEIGHT - ICON_TARGET) / 2.0).round
     append_to @left do
-      stack pos => pixelpos, :left => 0, :width => 38, :margin => 4 do
-        bg = background "#DFA", :height => 26, :curve => 6, :hidden => true
-        image(icon_path, :margin => 4).
+      # The handlers go on the image, not on the surrounding stack. A slot's
+      # `click` in Lacci is an app-wide subscription filtered by a hit test
+      # rather than a real hit target, and hanging the sidebar off that
+      # stopped it working at all -- so the drawable you click is the icon,
+      # and the icon is drawn at ICON_TARGET rather than at the 16 pixels the
+      # artwork happens to be.
+      stack pos => pixelpos, :left => 0, :width => SIDEBAR_WIDTH,
+            :height => TAB_HEIGHT do
+        bg = background "#DFA", :height => TAB_HEIGHT - 4, :margin_top => 2,
+             :margin_left => 2, :curve => 6, :hidden => true
+        image(icon_path, :width => ICON_TARGET, :height => ICON_TARGET,
+              :margin_left => inset, :margin_top => top_inset).
           hover do
             bg.show
             tip.parent.width = width
@@ -69,7 +95,7 @@ class HH::SideTabs
           end.leave do
             bg.hide
             tip.hide
-            tip.parent.width = 40
+            tip.parent.width = SIDEBAR_WIDTH + 2
           end.click &onclick
       end
     end

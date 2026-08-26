@@ -122,8 +122,17 @@ even mid-paragraph), `button`, `check`, `radio`, `progress`, `edit_line`,
 `clipboard`, `mouse`, `clear`, `append`, `hide`, `show`, `toggle`.
 
 Not working: `video`, `sound`, `blur`, `glow`, `shadow`, `mask` (draws but does
-not mask), `del` (draws without the line), multiple windows, inner slot
-scrolling (only the window scrolls), and native-looking widgets.
+not mask), `del` (draws without the line), and native-looking widgets.
+
+`stack :scroll => true` works: the slot clips its contents, draws its own bar,
+scrolls under the wheel and can be dragged, and `scroll_top` reads and writes
+from Ruby. What is scrolled out of sight stops being clickable, which is the
+half that is easy to forget -- a drawable scrolled above its slot still has a
+real position, and without the clip in the hit test it goes on catching clicks
+from wherever that position landed. Delivering the wheel is the backend's part,
+and so far only the wasm backend does it; on the others a slot still scrolls
+when a program sets `scroll_top` itself, as Hackety Hack's editor does to keep
+the caret in view.
 
 ## Why not glimmer-dsl-libui?
 

@@ -9,7 +9,7 @@ import { bootApp, bootIDE } from "./helpers.mjs";
 
 async function openEditor(app) {
   const tabs = (await app.find("Image"))
-    .filter((image) => image.x < 38 && image.width <= 24)
+    .filter((image) => image.x < 60 && image.width <= 32)
     .sort((a, b) => a.y - b.y);
   await app.click(tabs[1].centerX, tabs[1].centerY);
   await app.advance(800);

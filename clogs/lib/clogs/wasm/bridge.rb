@@ -66,6 +66,14 @@ module Clogs
         host.call(:windowSize, window_id).to_s.split(",").map(&:to_f)
       end
 
+      # Whether the app scrolled something with the last wheel turn. The page
+      # uses it to decide whether to let the browser scroll as well, so a
+      # window with nothing to scroll still scrolls the page around it.
+      def set_wheel_used(window_id, used)
+        host.call(:setWheelUsed, window_id, used ? 1 : 0)
+        nil
+      end
+
       def set_cursor(window_id, css_cursor)
         host.call(:setCursor, window_id, css_cursor.to_s)
       end

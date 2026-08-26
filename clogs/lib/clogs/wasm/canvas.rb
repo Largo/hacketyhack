@@ -15,7 +15,7 @@ module Clogs
   # compromise -- there is no use for two mouse positions in one frame.
   class Canvas
     attr_reader :window_id
-    attr_accessor :on_draw, :on_mouse, :on_key, :on_crossed
+    attr_accessor :on_draw, :on_mouse, :on_key, :on_crossed, :on_wheel
 
     def initialize(window_id, width, height)
       @window_id = window_id
@@ -113,6 +113,10 @@ module Clogs
       return false unless ext || char
 
       !!@on_key&.call(KeyEvent.new(char: char, ext: ext, modifier: 0, modifiers: modifiers, up: up))
+    end
+
+    def dispatch_wheel(x, y, amount)
+      @on_wheel&.call(x, y, amount)
     end
 
     def dispatch_crossed(left)

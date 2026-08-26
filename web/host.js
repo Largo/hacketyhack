@@ -170,6 +170,17 @@
       e.preventDefault();
     });
     canvas.addEventListener("mouseup", (e) => pushMouse(id, e, 0, buttonOf(e.button)));
+    canvas.addEventListener("wheel", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      // deltaMode 1 is lines rather than pixels, which is what a real wheel
+      // reports on some platforms.
+      const amount = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      events.push(["w", id, e.clientX - rect.left, e.clientY - rect.top, Math.round(amount)]);
+      // Only swallow the page's own scrolling when the app actually used it;
+      // the app is told on the next frame, so this asks what it did last time.
+      if (canvas.dataset.clogsScrolled === "1") e.preventDefault();
+    }, { passive: false });
+
     canvas.addEventListener("mouseenter", () => events.push(["x", id, 0]));
     canvas.addEventListener("mouseleave", () => events.push(["x", id, 1]));
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -311,6 +322,11 @@
     windowSize(id) {
       const win = windows.get(id);
       return win ? win.cssWidth + "," + win.cssHeight : "0,0";
+    },
+
+    setWheelUsed(id, used) {
+      const win = windows.get(id);
+      if (win) win.canvas.dataset.clogsScrolled = used ? "1" : "0";
     },
 
     setCursor(id, cursor) {
@@ -550,6 +566,13 @@
       if (!hit) throw new Error(`clogs.clickText: only ${hits.length} matches for ${query}`);
       this.click(hit.centerX, hit.centerY, windowId);
       return hit;
+    },
+
+    // Turn the wheel over a point, as a person would. Delivered on the next
+    // tick like every other input.
+    wheel(x, y, amount, windowId = 1) {
+      events.push(["w", windowId, x, y, amount]);
+      return this;
     },
 
     // Everything a test needs to pretend to be a person. Each of these leaves

@@ -186,6 +186,9 @@ module Clogs
           case kind
           when "m" then app.canvas.dispatch_mouse(event[2], event[3], event[4], event[5], event[6], event[7])
           when "k" then app.canvas.dispatch_key(event[2], event[3], event[4] == 1)
+          when "w"
+            used = app.canvas.dispatch_wheel(event[2], event[3], event[4])
+            Bridge.set_wheel_used(app.window_id, used)
           when "x" then app.canvas.dispatch_crossed(event[2] == 1)
           when "r" then app.resize(event[2], event[3])
           when "q" then app.quit

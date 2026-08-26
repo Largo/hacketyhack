@@ -7,7 +7,7 @@ import { bootIDE } from "./helpers.mjs";
 async function sidebarTabs(app) {
   const images = await app.find("Image");
   return images
-    .filter((image) => image.x < 38 && image.width <= 24)
+    .filter((image) => image.x < 60 && image.width <= 32)
     .sort((a, b) => a.y - b.y);
 }
 

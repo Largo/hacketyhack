@@ -152,6 +152,30 @@ module Clogs
 
     def contains?(px, py)
       return false if @abs_x.nil? || hidden?
+      return false unless px >= @abs_x && px < @abs_x + @width &&
+        py >= @abs_y && py < @abs_y + @height
+
+      !clipped_away?(px, py)
+    end
+
+    # Whether an enclosing slot has clipped this point out of sight. A
+    # drawable scrolled past the top of its slot still has a real position --
+    # it is simply above the slot -- and without this it would go on catching
+    # clicks from wherever that position landed, over whatever is drawn there.
+    def clipped_away?(px, py)
+      node = @parent
+      while node
+        return true if node.respond_to?(:clip_contents?) && node.clip_contents? &&
+          !node.box_contains?(px, py)
+
+        node = node.parent
+      end
+      false
+    end
+
+    # The plain rectangle test, without asking the parents anything.
+    def box_contains?(px, py)
+      return false if @abs_x.nil?
 
       px >= @abs_x && px < @abs_x + @width && py >= @abs_y && py < @abs_y + @height
     end

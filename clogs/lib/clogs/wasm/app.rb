@@ -74,6 +74,7 @@ module Clogs
       @canvas.on_mouse = method(:on_mouse)
       @canvas.on_key = method(:on_key)
       @canvas.on_crossed = method(:on_crossed)
+      @canvas.on_wheel = method(:on_wheel)
     end
 
     # Show the canvas and hand control back to the page.

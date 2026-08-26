@@ -5,6 +5,20 @@ import { bootApp } from "./helpers.mjs";
 // program lays out against the size it is given. So the page hands a resizable
 // app the whole viewport and tells it to lay out again, rather than drawing it
 // at the size it asked for and stretching the result.
+// page.setViewportSize returns before the page's own resize event fires, and
+// the app only hears about it on the frame after that -- so wait for the app
+// to report the size rather than assuming one settle was enough.
+async function resizeTo(page, app, size, expectedWidth) {
+  await page.setViewportSize(size);
+  await expect
+    .poll(async () => {
+      await app.settle();
+      const [win] = await app.windows();
+      return win.width;
+    })
+    .toBe(expectedWidth);
+}
+
 test.describe("window sizing", () => {
   test("a resizable app is given the page and lays out to it", async ({ page }) => {
     const app = await bootApp(page);
@@ -50,11 +64,8 @@ test.describe("window sizing", () => {
     const before = (await app.describe()).drawables.width;
 
     // Still wider than the 790 Hackety Hack declares, so it follows the window.
-    await page.setViewportSize({ width: 900, height: 700 });
-    await app.settle();
+    await resizeTo(page, app, { width: 900, height: 700 }, 900);
 
-    const [win] = await app.windows();
-    expect(win.width).toBe(900);
     expect((await app.describe()).drawables.width).toBe(900);
     expect(before).not.toBe(900);
   });
@@ -65,8 +76,8 @@ test.describe("window sizing", () => {
     // declared size and the page grows scrollbars to reach the rest of it.
     const app = await bootApp(page);
 
-    await page.setViewportSize({ width: 500, height: 400 });
-    await app.settle();
+    // 790 is the width Hackety Hack declares, and its floor.
+    await resizeTo(page, app, { width: 500, height: 400 }, 790);
 
     const [win] = await app.windows();
     expect(win.width, "the app was squashed below its declared width").toBeGreaterThan(500);
@@ -85,10 +96,8 @@ test.describe("window sizing", () => {
     // viewport the canvas was measured against -- so the fit runs again.
     const app = await bootApp(page);
 
-    await page.setViewportSize({ width: 500, height: 400 });
-    await app.settle();
-    await page.setViewportSize({ width: 1000, height: 800 });
-    await app.settle();
+    await resizeTo(page, app, { width: 500, height: 400 }, 790);
+    await resizeTo(page, app, { width: 1000, height: 800 }, 1000);
 
     const overflow = await page.evaluate(() => ({
       horizontal: document.body.scrollWidth - document.documentElement.clientWidth,

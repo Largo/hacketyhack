@@ -286,14 +286,31 @@ class Shoes::Para
   end
 end
 
-# Shoes 3 slots scrolled their own contents; Clogs scrolls only the window
-# (see the coverage matrix). Accept the calls so programs run.
+# Shoes 3 slots scrolled their own contents, and Clogs slots now do too, so
+# these forward to the display side rather than remembering a number nobody
+# reads. Hackety Hack's editor drives this directly: it scrolls the code area
+# to keep the caret in view as you type.
 class Shoes::Slot
-  attr_writer :scroll_top unless method_defined?(:scroll_top=)
+  unless method_defined?(:scroll_top)
+    def scroll_top
+      peer = __shoes3_slot_peer
+      peer.respond_to?(:scroll_top) ? peer.scroll_top : (@scroll_top || 0)
+    end
 
-  def scroll_top
-    @scroll_top || 0
-  end unless method_defined?(:scroll_top)
+    def scroll_top=(value)
+      @scroll_top = value
+      peer = __shoes3_slot_peer
+      peer.scroll_top = value if peer.respond_to?(:scroll_top=)
+      value
+    end
+
+    private
+
+    def __shoes3_slot_peer
+      Shoes::DisplayService.display_service
+        &.query_display_drawable_for(linkable_id, nil_ok: true)
+    end
+  end
 end
 
 # Shoes 3 fires a slot's click/release/hover/leave handlers only when the

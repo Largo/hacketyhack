@@ -64,6 +64,14 @@ module Clogs
       requested = [requested - mt - mb, 0].max if requested
       content_avail_height = requested ? [requested - pt - pb, 0].max : available_height
 
+      # A scrolling slot keeps its bar inside its own box rather than letting
+      # it sit over the content, so the room comes off the width the children
+      # are laid out against. It is reserved whether or not the content
+      # currently overflows: laying out again the moment it does would reflow
+      # every line at the exact moment the user started scrolling.
+      content_width -= SCROLLBAR_WIDTH if scrolls?
+      content_width = 0 if content_width.negative?
+
       flowed, positioned = laid_out_children.partition { |c| !c.positioned? }
       content_height = if flow?
         layout_flow(flowed, content_width, content_avail_height)
@@ -74,6 +82,9 @@ module Clogs
       @content_width = content_width
       @width = outer_width
       @height = requested || (content_height + pt + pb)
+      # What the children actually came to, which is what there is to scroll
+      # through when it is more than fits.
+      @content_height = content_height + pt + pb
 
       inner_height = [@height - pt - pb, 0].max
       positioned.each do |child|
@@ -141,9 +152,76 @@ module Clogs
 
     # A slot with an explicit size clips its contents, as Shoes 3 did --
     # Hackety Hack's sidebar tooltip relies on it by growing the slot on
-    # hover.
+    # hover. A scrolling slot clips too, by definition: the part you have not
+    # scrolled to is the part that must not be drawn.
     def clip_contents?
-      !style(:width).nil? && !style(:height).nil?
+      scrolls? || (!style(:width).nil? && !style(:height).nil?)
+    end
+
+    # ---- scrolling -----------------------------------------------------
+    #
+    # `stack :scroll => true` in Shoes gives a slot its own scrollbar and
+    # scrolls its contents under it. Hackety Hack asks for exactly that in two
+    # places that matter -- the lesson pane and the editor's code area -- and
+    # without it everything past the bottom edge is simply unreachable.
+
+    SCROLLBAR_WIDTH = 10
+    MIN_THUMB = 24
+
+    def scrolls?
+      !style(:scroll).nil? && style(:scroll) != false
+    end
+
+    def content_height
+      @content_height || @height || 0
+    end
+
+    # How far down it is possible to scroll: nothing, when it all fits.
+    def max_scroll
+      [content_height - (@height || 0), 0].max
+    end
+
+    def scroll_top
+      [(@scroll_top || 0), max_scroll].min
+    end
+
+    def scroll_top=(value)
+      wanted = value.to_f.round
+      wanted = 0 if wanted.negative?
+      wanted = max_scroll if wanted > max_scroll
+      return if wanted == @scroll_top
+
+      @scroll_top = wanted
+      redraw!
+    end
+
+    # A wheel turn, or a drag of the bar. Returns true when it actually moved,
+    # so a wheel over a slot that cannot scroll falls through to whatever is
+    # behind it.
+    def scroll_by(amount)
+      return false unless scrolls? && max_scroll.positive?
+
+      before = scroll_top
+      self.scroll_top = before + amount
+      scroll_top != before
+    end
+
+    def scrollbar_rect
+      return nil unless scrolls? && max_scroll.positive? && @abs_x
+
+      [@abs_x + @width - SCROLLBAR_WIDTH, @abs_y, SCROLLBAR_WIDTH, @height]
+    end
+
+    def thumb_rect
+      track = scrollbar_rect
+      return nil unless track
+
+      tx, ty, tw, th = track
+      height = [(th * th.to_f / content_height).round, MIN_THUMB].max
+      height = th if height > th
+      travel = th - height
+      offset = max_scroll.zero? ? 0 : (travel * scroll_top.to_f / max_scroll).round
+      [tx, ty + offset, tw, height]
     end
 
     def paint(painter, ox, oy)
@@ -161,17 +239,35 @@ module Clogs
       else
         paint_children(painter)
       end
+      paint_scrollbar(painter)
       decorations.grep(Border).each do |d|
         d.paint_for_slot(painter, @abs_x, @abs_y, @width, @height) unless d.hidden?
       end
     end
 
     def paint_children(painter)
+      # Scrolling moves the contents up under the clip; the children know
+      # nothing about it, and the absolute positions they record on the way
+      # through are the ones the mouse will be tested against.
+      oy = @abs_y - (scrolls? ? scroll_top : 0)
       @children.each do |child|
         next if child.hidden? || child.is_a?(Background) || child.is_a?(Border)
 
-        child.paint(painter, @abs_x, @abs_y)
+        child.paint(painter, @abs_x, oy)
       end
+    end
+
+    TRACK_COLOR = [0, 0, 0, 26].freeze
+    THUMB_COLOR = [0, 0, 0, 92].freeze
+
+    # Outside the clip, so the bar stays put while the contents move under it.
+    def paint_scrollbar(painter)
+      track = scrollbar_rect
+      return unless track
+
+      painter.fill_rect(*track, TRACK_COLOR)
+      tx, ty, tw, th = thumb_rect
+      painter.fill_rect(tx + 2, ty + 1, tw - 4, [th - 2, 1].max, THUMB_COLOR)
     end
   end
 

@@ -20,7 +20,7 @@ const LESSON_SETS = [
 
 async function openLessonsTab(app) {
   const sideTabs = (await app.find("Image"))
-    .filter((image) => image.x < 38 && image.width <= 24)
+    .filter((image) => image.x < 60 && image.width <= 32)
     .sort((a, b) => a.y - b.y);
   await app.click(sideTabs[2].centerX, sideTabs[2].centerY);
   await app.advance(1000);
