@@ -61,21 +61,45 @@ module HH::LessonContainerText
   end
 
   include HH::Markup
+
+  # A code sample, optionally with something to do about it.
+  #
+  #   embed_code 'alert "hi"', :run_button => true
+  #   embed_code source, :try_button => true, :name => "Bouncing Ball"
+  #
+  # `run_button` runs the sample where it stands, which suits a one-liner.
+  # `try_button` puts it in the editor and opens it, which is what a sample
+  # worth keeping wants: the lesson stops being something you copy by hand and
+  # starts being something you can change and run. Give it a `name` and the
+  # program arrives ready to save under that name.
   def embed_code str, opts={}
     stack :margin_bottom => 12 do
       background "#602", :curve => 4
       para highlight(str, nil, COLORS), CODE_STYLE
+
+      right = 2
       if opts[:run_button]
-        stack :top => 0, :right => 2, :width => 70 do
-          stack do
-            background "#8A7", :margin => [0, 2, 0, 2], :curve => 4
-            l = link("Run this", :stroke => "#eee", :underline => "none") do
-              eval(str, TOPLEVEL_BINDING)
-            end
-            para l, :margin => 4, :align => 'center',
-              :weight => 'bold', :size => 9
-          end
+        code_button "Run this", right, 70, "#8A7" do
+          eval(str, TOPLEVEL_BINDING)
         end
+        right += 74
+      end
+      if opts[:try_button]
+        code_button "Open in editor", right, 104, "#78A" do
+          HH::APP.load_file(:script => str, :name => opts[:name])
+        end
+      end
+    end
+  end
+
+  # One of the little buttons that sit in a code sample's top right corner.
+  def code_button label, right, width, colour, &blk
+    stack :top => 0, :right => right, :width => width do
+      stack do
+        background colour, :margin => [0, 2, 0, 2], :curve => 4
+        l = link(label, :stroke => "#eee", :underline => "none", &blk)
+        para l, :margin => 4, :align => 'center',
+          :weight => 'bold', :size => 9
       end
     end
   end

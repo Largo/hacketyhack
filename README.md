@@ -67,7 +67,14 @@ its key event, and libui stays the default because it is the only one that
 installs without a compiler. `rake compare` reproduces the table, and the trade-offs are in
 [`clogs/docs/backends.md`](clogs/docs/backends.md).
 
-Eleven of the twelve Shoes programs in `samples/` run unmodified on every
+Two more programs and the lessons that build them are new: `Catch`, a game
+where you keep a ball off the floor with a bat that follows the mouse, and
+`Draw`, a drawing program with colours and a rubber. Each is written a step at
+a time in its lesson, and every step is a whole program — "Open in editor"
+puts it in the editor ready to run, so the lessons stop being something you
+copy by hand.
+
+Eleven of the twelve original Shoes programs in `samples/` run unmodified on every
 backend — `Clock`, `Scribble`, `Pong`, `Duel`, `Follow`, `Arcs`, `Fractal`,
 `Funnies`, `Animated Flowers` and both `Turtle` programs — exercising
 animation, `clear`/redraw, mouse input, art drawables, turtle widgets and
@@ -117,7 +124,7 @@ WebAssembly and running in the page.
 cd web
 npm install
 npm run serve      # http://localhost:4173 -- the IDE
-npm test           # 30 Playwright tests
+npm test           # 49 Playwright tests
 ```
 
 The app is not ported. `app/`, `lib/`, `samples/` and `lessons/` are shipped

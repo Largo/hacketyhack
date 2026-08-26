@@ -11,6 +11,8 @@ const LESSON_SETS = [
   "3: Basic Ruby",
   "4: Basic Shoes",
   "5: Better Guessing Game",
+  "6: Make Something Move",
+  "7: Make a Drawing Program",
   "Beginner Data Structures",
   "Data Types",
   "Fun with Arrays",
@@ -90,6 +92,42 @@ test.describe("the lesson tutor", () => {
     expect(seen.size).toBeGreaterThan(8);
 
     app.expectNoErrors();
+  });
+
+  test("a lesson hands its program to the editor, ready to run", async ({ page }) => {
+    // The lessons that build a program offer "Open in editor" rather than
+    // asking you to retype forty lines. The point is that what arrives is
+    // runnable: this opens it, presses Run, and checks a window appears.
+    const app = await bootIDE(page);
+    await openLessonsTab(app);
+    await app.clickText("6: Make Something Move");
+    await app.advance(1200);
+
+    // The prose names the button too, so pick the narrow one in the corner of
+    // the code sample rather than the sentence talking about it.
+    const button = async () => (await app.find("Open in editor")).filter((hit) => hit.width < 130)[0];
+
+    const next = await nextButton(app);
+    let found = await button();
+    for (let i = 0; i < 10 && !found; i++) {
+      await app.click(next.x, next.y);
+      await app.advance(400);
+      found = await button();
+    }
+    expect(found, "no lesson page offers to open its program in the editor").toBeTruthy();
+
+    await app.click(found.centerX, found.centerY);
+    await app.advance(1500);
+
+    const texts = await app.texts();
+    expect(texts, "the program did not arrive under its name").toContain("Bouncing Ball");
+    expect(texts.some((t) => t.includes("Shoes.app") && t.includes("oval")),
+      "the editor did not receive the code").toBe(true);
+
+    const before = (await app.windows()).length;
+    await app.clickText("Run");
+    await app.advance(1200);
+    expect((await app.windows()).length, "Run opened no window").toBeGreaterThan(before);
   });
 
   test("the tour's Run this button runs the program it shows", async ({ page }) => {
